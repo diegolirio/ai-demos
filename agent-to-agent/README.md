@@ -10,6 +10,8 @@ cliente ─POST /chat─▶ ana-agent:8080 ─A2A JSON-RPC─▶ investimentos-a
 
 ## Rodando
 
+> Passo a passo completo para testar e explorar (LLM, chat web, hops, falhas): [docs/GUIA-TESTES.md](docs/GUIA-TESTES.md).
+
 Pré-requisitos: JDK 25 (`$HOME/.sdkman/candidates/java/25.0.2-tem`, ou `make JAVA_HOME=...`), Maven, Docker, `jq`,
 Node 24 + npm (Next 16 exige Node ≥ 20.9; `make up` roda `build`, que executa `npm ci && npm run build` do chat-web no host).
 
