@@ -11,10 +11,11 @@ LOAD_ENV = set -a; [ -f $(ENV_FILE) ] && . ./$(ENV_FILE) || echo "[make] $(ENV_F
 # O compose interpola LLM_API_KEY (obrigatoria) mesmo quando so o postgres sobe; o postgres nao usa o valor.
 COMPOSE_DB = LLM_API_KEY=$${LLM_API_KEY:-nao-usado-pelo-postgres} docker compose
 
-.PHONY: build test test-integration up down logs ps smoke smoke-falha db-up db-down db-reset run-mcps run-investimentos run-ana
+.PHONY: build test test-integration up down logs ps smoke smoke-falha db-up db-down db-reset run-mcps run-investimentos run-ana run-web test-web
 
 build:
 	@for s in $(SERVICES); do echo "==> build $$s"; (cd $$s && mvn -q -DskipTests package) || exit 1; done
+	@echo "==> build chat-web"; cd chat-web && npm ci && npm run build
 
 # Só unitários (rápido, sem Docker): o surefire exclui @Tag("integration") por padrão.
 test:
@@ -24,6 +25,10 @@ test:
 # Primeira execução baixa as imagens e o modelo (veja README); depois usa a imagem local tc-ollama-<modelo>.
 test-integration:
 	@for s in $(IT_SERVICES); do echo "==> test-integration $$s"; (cd $$s && mvn -q -P integration-test test) || exit 1; done
+
+# Frontend: typecheck + lint + vitest (sem Docker, sem backend)
+test-web:
+	cd chat-web && npm ci && npm run typecheck && npm run lint && npm test
 
 up: build
 	docker compose up -d --build --wait
@@ -75,3 +80,7 @@ run-investimentos: db-up
 # Ana em localhost:8080 (delegação A2A para localhost:8081)
 run-ana: db-up
 	@$(LOAD_ENV); cd ana-agent && mvn spring-boot:run
+
+# Chat web em localhost:3000 (next dev), falando com a Ana em localhost:8080 (make run-ana ou make up)
+run-web:
+	cd chat-web && ([ -d node_modules ] || npm ci) && ANA_URL=$${ANA_URL:-http://localhost:8080} npm run dev

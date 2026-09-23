@@ -79,3 +79,18 @@ services:
     healthcheck:
       <<: *healthcheck
       test: ["CMD-SHELL", "curl -fs http://localhost:8080/actuator/health || exit 1"]
+
+  chat-web:
+    build: ./chat-web
+    ports:
+      - "3000:3000"
+    environment:
+      # BFF: só o servidor Next fala com a Ana (rede do compose)
+      ANA_URL: http://ana-agent:8080
+    depends_on:
+      ana-agent:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck
+      # node:24-alpine não tem curl; wget do busybox resolve
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health >/dev/null || exit 1"]
