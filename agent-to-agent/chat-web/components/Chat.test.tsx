@@ -108,4 +108,25 @@ describe("Chat", () => {
     expect(screen.getByTestId("session-id").textContent).not.toBe(sessaoAnterior);
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).customerId).toBe("cli-003");
   });
+
+  it("bloqueia troca de cliente e nova conversa enquanto a requisição está pendente", async () => {
+    let resolver: (value: Response) => void;
+    fetchMock.mockReturnValue(
+      new Promise<Response>((resolve) => {
+        resolver = resolve;
+      }),
+    );
+    render(<Chat />);
+
+    await enviar("oi");
+
+    expect(screen.getByLabelText("Cliente")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Nova conversa" })).toBeDisabled();
+
+    resolver!(Response.json({ sessionId: "s", reply: "olá", debug: null }));
+
+    expect(await screen.findByText("olá")).toBeInTheDocument();
+    expect(screen.getByLabelText("Cliente")).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Nova conversa" })).not.toBeDisabled();
+  });
 });

@@ -67,7 +67,7 @@ export function Chat() {
           <h1>Ana</h1>
           <label>
             Cliente
-            <select value={customerId} onChange={(e) => novaConversa(e.target.value)}>
+            <select value={customerId} onChange={(e) => novaConversa(e.target.value)} disabled={enviando}>
               {CLIENTES.map((cliente) => (
                 <option key={cliente.id} value={cliente.id}>
                   {cliente.id} — {cliente.descricao}
@@ -75,7 +75,7 @@ export function Chat() {
               ))}
             </select>
           </label>
-          <button type="button" onClick={() => novaConversa()}>
+          <button type="button" onClick={() => novaConversa()} disabled={enviando}>
             Nova conversa
           </button>
           <small className={styles.sessao} data-testid="session-id">
@@ -83,7 +83,7 @@ export function Chat() {
           </small>
         </header>
 
-        <ol className={styles.mensagens} aria-label="Conversa">
+        <ol className={styles.mensagens} aria-label="Conversa" aria-live="polite">
           {mensagens.map((m) => (
             <li key={m.id} className={styles[m.autor]} data-autor={m.autor}>
               {m.texto}
