@@ -94,7 +94,7 @@ sequenceDiagram
         participant RH as JSONRPCHandler / DefaultRequestHandler
         participant EX as InvestimentosAgentExecutor
         participant ES as EspecialistaInvestimentos
-        participant TP as ToolProviderComLog / McpToolProvider
+        participant TP as ToolExecutorComLog → DefaultMcpClient
     end
     participant CDB as cdb-mcp (:8083)<br/>CdbTools / CdbRepository
     participant TM as tracking-money-mcp (:8082)<br/>TrackingMoneyTools / TrackingMoneyRepository
@@ -168,7 +168,8 @@ Se o especialista estiver fora, der timeout (90s) ou a Task terminar diferente d
 | `JSONRPCHandler` / `DefaultRequestHandler` | investimentos-agent (SDK a2a-java) | Ciclo de vida da Task: cria, enfileira, executa o `AgentExecutor` e agrega os eventos até o estado final. |
 | `InvestimentosAgentExecutor` | investimentos-agent | `AgentExecutor`. Extrai o `customerId` do DataPart, chama o especialista com a memória do `contextId`, publica o artifact `[TextPart, DataPart §9]` e dá `complete()`, ou `fail()` em caso de erro. |
 | `EspecialistaInvestimentos` (criado por `EspecialistaFactory`) | investimentos-agent | AI Service com as tools MCP. Decide sozinho quais tools chamar (autonomia do especialista) e devolve `RespostaEspecialista` no schema §9. |
-| `ToolProviderComLog` / `McpToolProvider` / `DefaultMcpClient` | investimentos-agent | Descobre as tools nos dois MCP servers (Streamable HTTP em `/mcp`) e as executa. O decorator loga tool, `contextId` e duração de cada chamada. |
+| `ToolProviderComLog` / `McpToolProvider` | investimentos-agent | Na montagem do especialista, descobre as tools dos dois MCP servers (Streamable HTTP em `/mcp`) e envolve o executor de cada uma com `ToolExecutorComLog`. |
+| `ToolExecutorComLog` / `DefaultMcpClient` | investimentos-agent | Em cada chamada de tool feita pelo LLM: loga tool, `contextId` (memoryId) e duração, e executa a chamada MCP `tools/call` via `DefaultMcpClient`; erros sobem inalterados para o LangChain4j devolver ao LLM. |
 | `SQLChatMemoryStore` (em `EspecialistaConfig`) | investimentos-agent | Memória do especialista no Postgres (schema `investimentos`), por `contextId` A2A. |
 | `CdbTools` / `CdbRepository` | cdb-mcp | Tools `listar_posicoes_cdb` e `listar_resgates_cdb` (entrada `customerId`, JSON Schema estrito), com dados mock em memória. |
 | `TrackingMoneyTools` / `TrackingMoneyRepository` | tracking-money-mcp | Tools `listar_movimentacoes` (`customerId`) e `consultar_status_transferencia` (`transferenciaId`), com dados mock em memória. |
