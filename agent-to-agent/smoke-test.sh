@@ -3,6 +3,7 @@
 set -uo pipefail
 
 ANA_URL=${ANA_URL:-http://localhost:8080}
+WEB_URL=${WEB_URL:-http://localhost:3000}
 falhas=0
 
 chat() { # sessionId customerId mensagem
@@ -51,6 +52,9 @@ if [[ "${1:-}" == "--investimentos-fora" ]]; then
   grep -qi "instantes" <<<"$(jq -r .reply /tmp/smoke-fora.json)"; verificar "mensagem de indisponibilidade" $?
   exit $falhas
 fi
+
+echo "== chat-web"
+curl -sf "$WEB_URL/api/health" >/dev/null; verificar "chat-web /api/health responde 200" $?
 
 cenario cli-001 "liquida"
 cenario cli-002 "conta" "LIQUIDADO"

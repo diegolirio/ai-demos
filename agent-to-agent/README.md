@@ -10,17 +10,20 @@ cliente ─POST /chat─▶ ana-agent:8080 ─A2A JSON-RPC─▶ investimentos-a
 
 ## Rodando
 
-Pré-requisitos: JDK 25 (`$HOME/.sdkman/candidates/java/25.0.2-tem`, ou `make JAVA_HOME=...`), Maven, Docker, `jq`.
+Pré-requisitos: JDK 25 (`$HOME/.sdkman/candidates/java/25.0.2-tem`, ou `make JAVA_HOME=...`), Maven, Docker, `jq`,
+Node 24 + npm (Next 16 exige Node ≥ 20.9; `make up` roda `build`, que executa `npm ci && npm run build` do chat-web no host).
 
 ```bash
 cp .env.example .env    # preencha LLM_BASE_URL / LLM_API_KEY / LLM_MODEL
 make test               # só unitários (rápido, sem Docker nem LLM real)
 make test-integration   # testes de integração: Postgres + LLM real (Ollama) via Testcontainers — ver abaixo
-make up                 # build + compose, espera todos healthy
+make up                 # build + compose, espera todos healthy — o chat fica em http://localhost:3000
 make smoke              # jornada completa para cli-001..cli-004
 make smoke-falha        # derruba o especialista e confere o fallback da Ana
 make logs               # hops: ana.chat, ana.tool.delegar_investimentos, a2a.task.*, mcp.tool.call
 make down
+make test-web          # frontend: typecheck + lint + vitest
+make run-web           # chat web em http://localhost:3000 (next dev), Ana em localhost:8080
 ```
 
 ### Rodar e explorar localmente (fora do Docker)
@@ -68,6 +71,112 @@ dentro do container) e `testcontainers/ryuk:0.12.0` (se ainda não estiver local
 `tc-ollama-qwen2.5-3b` (`OllamaContainer.commitToImage`) e as execuções seguintes sobem direto dela, sem baixar o
 modelo de novo. Para refazer o cache: `docker rmi tc-ollama-qwen2.5-3b`. Inferência em CPU é lenta (minutos por
 teste); por isso o timeout do `ChatModel` é configurável (`llm.timeout`, default 60s; 300s nos ITs).
+
+## Fluxo ponta a ponta
+
+Turno 2 da jornada ("estava em investimentos e não encontro"), do navegador até os MCP servers e de volta. No turno 1 ("meu dinheiro sumiu") o LLM da Ana responde direto, sem chamar a tool: os passos da delegação não acontecem e `debug` volta `null`.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as Usuário
+    box chat-web (Next.js :3000)
+        participant CH as Chat.tsx
+        participant BFF as api/chat/route.ts
+    end
+    box ana-agent (:8080)
+        participant CC as ChatController
+        participant AA as AnaAssistant
+        participant DT as DelegacaoInvestimentosTool
+        participant AC as InvestimentosA2aClient
+    end
+    box investimentos-agent (:8081)
+        participant JR as A2aJsonRpcController
+        participant RH as JSONRPCHandler / DefaultRequestHandler
+        participant EX as InvestimentosAgentExecutor
+        participant ES as EspecialistaInvestimentos
+        participant TP as ToolExecutorComLog → DefaultMcpClient
+    end
+    participant CDB as cdb-mcp (:8083)<br/>CdbTools / CdbRepository
+    participant TM as tracking-money-mcp (:8082)<br/>TrackingMoneyTools / TrackingMoneyRepository
+    participant LLM as LLM (OpenAI-compatible)
+    participant PG as Postgres (chat_memory)
+
+    U->>CH: digita a mensagem
+    CH->>BFF: POST /api/chat {sessionId, customerId, message}
+    BFF->>CC: POST /chat?debug=true
+    CC->>AA: conversar(sessionId, message, InvocationParameters)
+    Note right of CC: InvocationParameters leva sessionId,<br/>customerId e requestId (fora do LLM)
+    AA->>PG: SQLChatMemoryStore.getMessages(sessionId) [schema ana]
+    AA->>LLM: prompt de triagem + histórico + tool delegar_investimentos
+    LLM-->>AA: tool call delegar_investimentos(pedido)
+    AA->>DT: delegarInvestimentos(pedido, InvocationParameters)
+    DT->>AC: delegar(sessionId, customerId, pedido)
+    AC->>JR: GET /.well-known/agent-card.json (A2ACardResolver)
+    AC->>JR: POST / JSON-RPC SendMessage (A2A-Version 1.0)<br/>TextPart pedido + DataPart customerId, contextId = sessionId
+    JR->>RH: onMessageSend(SendMessageRequest)
+    RH->>EX: execute(RequestContext, AgentEmitter)
+    EX->>ES: investigar(contextId, customerId + pedido)
+    ES->>PG: getMessages(contextId) [schema investimentos]
+    loop enquanto o LLM pedir tools
+        ES->>LLM: pedido + tools MCP disponíveis
+        LLM-->>ES: tool call
+        ES->>TP: executa a tool (loga tool, contextId, durationMs)
+        alt tools de CDB
+            TP->>CDB: MCP tools/call listar_resgates_cdb / listar_posicoes_cdb
+            CDB-->>TP: JSON com resgates e posições
+        else tools de conta
+            TP->>TM: MCP tools/call listar_movimentacoes / consultar_status_transferencia
+            TM-->>TP: JSON com movimentações e status
+        end
+        TP-->>ES: resultado da tool
+    end
+    LLM-->>ES: JSON no schema §9 (facts, answerDraft, confidence, risks, sources)
+    ES-->>EX: RespostaEspecialista
+    EX->>RH: addArtifact(TextPart answerDraft + DataPart §9) e complete()
+    RH-->>JR: Task TASK_STATE_COMPLETED
+    JR-->>AC: resultado JSON-RPC
+    AC-->>DT: RespostaInvestimentos (lida do DataPart)
+    DT->>DT: UltimasRespostasInvestimentos.registrar(requestId)
+    DT-->>AA: paraTextoLlm()
+    AA->>LLM: resultado da tool
+    LLM-->>AA: resposta final no tom da Ana
+    AA->>PG: updateMessages(sessionId)
+    AA-->>CC: reply
+    CC-->>BFF: {sessionId, reply, debug}
+    BFF-->>CH: JSON
+    CH-->>U: bolha da Ana + PainelDebug (facts, confidence, risks, sources)
+```
+
+Se o especialista estiver fora, der timeout (90s) ou a Task terminar diferente de `COMPLETED`, o `InvestimentosA2aClient` lança `InvestimentosIndisponivelException`. A `DelegacaoInvestimentosTool` a converte em `INDISPONIVEL: ...`, e a Ana responde "não consegui consultar seus investimentos agora", sem 5xx. Se a Ana estiver fora, o BFF responde 502 e o chat mostra um aviso.
+
+## Objetos do fluxo
+
+| Objeto | App | Como funciona |
+|---|---|---|
+| `Chat` (`components/Chat.tsx`) | chat-web | Client component. Guarda a conversa em memória, gera o `sessionId` com `crypto.randomUUID()`, permite trocar o cliente (nova sessão) e chama `POST /api/chat`. Mostra "Ana está digitando…" e avisos de erro. |
+| `PainelDebug` (`components/PainelDebug.tsx`) | chat-web | Um item por turno. Mostra o retorno do especialista (barra de `confidence`, `facts`, `risks`, `sources`) ou "sem delegação" quando `debug` é `null`. |
+| `POST /api/chat` (`app/api/chat/route.ts`) | chat-web | BFF: repassa o corpo para `${ANA_URL}/chat?debug=true` com timeout de 120s. Erro de rede, timeout, 5xx, qualquer não-2xx diferente de 400 e 2xx com corpo não-JSON viram 502 com mensagem amiga; só 400 da Ana é repassado como 400. O navegador nunca fala com a Ana. |
+| `GET /api/health` (`app/api/health/route.ts`) | chat-web | Healthcheck do container (`{"status":"UP"}`). |
+| `ChatController` | ana-agent | `POST /chat`. Valida os campos, monta os `InvocationParameters` (`sessionId`, `customerId`, `requestId`), chama o `AnaAssistant` e, com `?debug=true`, anexa o §9 do turno. |
+| `AnaAssistant` (criado por `AnaFactory`) | ana-agent | AI Service do LangChain4j: prompt de triagem (`prompts/ana-system.txt`), memória por `sessionId` e uma única tool, `delegar_investimentos`. |
+| `DelegacaoInvestimentosTool` | ana-agent | `@Tool delegar_investimentos`. Lê `customerId` e `sessionId` dos `InvocationParameters` (nunca do LLM), chama o cliente A2A, registra o §9 para o debug e devolve texto ao LLM, ou `INDISPONIVEL:` em caso de falha. |
+| `UltimasRespostasInvestimentos` | ana-agent | Guarda o §9 por `requestId` durante a requisição, para o `ChatController` devolver no `debug`. |
+| `InvestimentosA2aClient` | ana-agent | Cliente a2a-java. Resolve o Agent Card a cada chamada, envia `SendMessage` (TextPart + DataPart `customerId`, `contextId = sessionId`), impõe timeout de 90s com cancelamento e extrai o DataPart §9 da Task. |
+| `SQLChatMemoryStore` (em `AnaConfig`) | ana-agent | Memória de chat da Ana no Postgres (schema `ana`, tabela `chat_memory`), por `sessionId`. |
+| `A2aJsonRpcController` | investimentos-agent | Ponte Spring MVC do servidor A2A: `GET /.well-known/agent-card.json` e `POST /` (JSON-RPC 2.0). Os corpos trafegam como String e o SDK serializa. |
+| `A2aServerConfig` | investimentos-agent | Monta o servidor a2a-java sem CDI (AgentCard, TaskStore e QueueManager em memória, MainEventBusProcessor, executores). Eleva o timeout do SDK de 5s para 60s via `RequestHandlerTimeouts`. |
+| `JSONRPCHandler` / `DefaultRequestHandler` | investimentos-agent (SDK a2a-java) | Ciclo de vida da Task: cria, enfileira, executa o `AgentExecutor` e agrega os eventos até o estado final. |
+| `InvestimentosAgentExecutor` | investimentos-agent | `AgentExecutor`. Extrai o `customerId` do DataPart, chama o especialista com a memória do `contextId`, publica o artifact `[TextPart, DataPart §9]` e dá `complete()`, ou `fail()` em caso de erro. |
+| `EspecialistaInvestimentos` (criado por `EspecialistaFactory`) | investimentos-agent | AI Service com as tools MCP. Decide sozinho quais tools chamar (autonomia do especialista) e devolve `RespostaEspecialista` no schema §9. |
+| `ToolProviderComLog` / `McpToolProvider` | investimentos-agent | A cada chamada do especialista (`investigar`), descobre as tools dos dois MCP servers (Streamable HTTP em `/mcp`) e envolve o executor de cada uma com `ToolExecutorComLog`. |
+| `ToolExecutorComLog` / `DefaultMcpClient` | investimentos-agent | Em cada chamada de tool feita pelo LLM: loga tool, `contextId` (memoryId) e duração, e executa a chamada MCP `tools/call` via `DefaultMcpClient`; erros sobem inalterados para o LangChain4j devolver ao LLM. |
+| `SQLChatMemoryStore` (em `EspecialistaConfig`) | investimentos-agent | Memória do especialista no Postgres (schema `investimentos`), por `contextId` A2A. |
+| `CdbTools` / `CdbRepository` | cdb-mcp | Tools `listar_posicoes_cdb` e `listar_resgates_cdb` (entrada `customerId`, JSON Schema estrito), com dados mock em memória. |
+| `TrackingMoneyTools` / `TrackingMoneyRepository` | tracking-money-mcp | Tools `listar_movimentacoes` (`customerId`) e `consultar_status_transferencia` (`transferenciaId`), com dados mock em memória. |
+| `McpServerConfig` | cdb-mcp e tracking-money-mcp | Registra o servlet `HttpServletStreamableServerTransportProvider` em `/mcp` e o `McpSyncServer` com as tools. |
+| LLM | externo | Endpoint compatível com OpenAI configurado por `LLM_BASE_URL`, `LLM_API_KEY` e `LLM_MODEL`, usado pela Ana e pelo especialista. |
+| Postgres | infra (compose) | Uma instância com os schemas `ana` e `investimentos`, cada um com sua tabela `chat_memory`. |
 
 ## Conversa manual
 
