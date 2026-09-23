@@ -1,0 +1,81 @@
+name: agent-to-agent
+
+x-healthcheck: &healthcheck
+  interval: 5s
+  timeout: 3s
+  retries: 30
+  start_period: 20s
+
+services:
+  postgres:
+    # Mesma imagem dos testes de integracao (Testcontainers, BaseIntegrationTest)
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: agents
+      POSTGRES_USER: agents
+      POSTGRES_PASSWORD: agents
+    volumes:
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "55432:5432"
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "pg_isready -U agents -d agents"]
+
+  cdb-mcp:
+    build: ./cdb-mcp
+    ports:
+      - "8083:8083"
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "curl -fs http://localhost:8083/actuator/health || exit 1"]
+
+  tracking-money-mcp:
+    build: ./tracking-money-mcp
+    ports:
+      - "8082:8082"
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "curl -fs http://localhost:8082/actuator/health || exit 1"]
+
+  investimentos-agent:
+    build: ./investimentos-agent
+    ports:
+      - "8081:8081"
+    environment:
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_API_KEY: ${LLM_API_KEY:?defina LLM_API_KEY no .env}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      A2A_PUBLIC_URL: http://investimentos-agent:8081
+      CDB_MCP_URL: http://cdb-mcp:8083/mcp
+      TRACKING_MONEY_MCP_URL: http://tracking-money-mcp:8082/mcp
+      DB_URL: jdbc:postgresql://postgres:5432/agents?currentSchema=investimentos
+    depends_on:
+      postgres:
+        condition: service_healthy
+      cdb-mcp:
+        condition: service_healthy
+      tracking-money-mcp:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "curl -fs http://localhost:8081/actuator/health || exit 1"]
+
+  ana-agent:
+    build: ./ana-agent
+    ports:
+      - "8080:8080"
+    environment:
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_API_KEY: ${LLM_API_KEY:?defina LLM_API_KEY no .env}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      INVESTIMENTOS_A2A_URL: http://investimentos-agent:8081
+      DB_URL: jdbc:postgresql://postgres:5432/agents?currentSchema=ana
+    depends_on:
+      postgres:
+        condition: service_healthy
+      investimentos-agent:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/actuator/health || exit 1"]

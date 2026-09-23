@@ -1,0 +1,27 @@
+server:
+  port: 8081
+spring:
+  application:
+    name: investimentos-agent
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+a2a:
+  # URL anunciada no Agent Card; o cliente A2A faz POST nela. No compose: http://investimentos-agent:8081
+  public-url: ${A2A_PUBLIC_URL:http://localhost:8081}
+  # O builder do DefaultRequestHandler fixa 5s; LLM + MCP passam disso
+  agent-timeout-seconds: 60
+llm:
+  base-url: ${LLM_BASE_URL:https://api.openai.com/v1}
+  api-key: ${LLM_API_KEY}
+  model: ${LLM_MODEL:gpt-4o-mini}
+  timeout: 60s
+mcp:
+  cdb-url: ${CDB_MCP_URL:http://localhost:8083/mcp}
+  tracking-money-url: ${TRACKING_MONEY_MCP_URL:http://localhost:8082/mcp}
+memoria:
+  jdbc-url: ${DB_URL:jdbc:postgresql://localhost:55432/agents?currentSchema=investimentos}
+  usuario: ${DB_USER:agents}
+  senha: ${DB_PASSWORD:agents}

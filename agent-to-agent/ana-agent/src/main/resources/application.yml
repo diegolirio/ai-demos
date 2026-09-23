@@ -1,0 +1,23 @@
+server:
+  port: 8080
+spring:
+  application:
+    name: ana-agent
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+investimentos:
+  # Único conhecimento que a Ana tem do especialista: a URL base (o Agent Card é descoberto dela)
+  a2a-url: ${INVESTIMENTOS_A2A_URL:http://localhost:8081}
+  timeout: 90s
+llm:
+  base-url: ${LLM_BASE_URL:https://api.openai.com/v1}
+  api-key: ${LLM_API_KEY}
+  model: ${LLM_MODEL:gpt-4o-mini}
+  timeout: 60s
+memoria:
+  jdbc-url: ${DB_URL:jdbc:postgresql://localhost:55432/agents?currentSchema=ana}
+  usuario: ${DB_USER:agents}
+  senha: ${DB_PASSWORD:agents}

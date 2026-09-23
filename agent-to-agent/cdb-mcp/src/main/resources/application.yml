@@ -1,0 +1,10 @@
+server:
+  port: 8083
+spring:
+  application:
+    name: cdb-mcp
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
