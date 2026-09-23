@@ -22,6 +22,8 @@ jq --version
 cp .env.example .env     # só na primeira vez
 ```
 
+Atalho para Ollama local: `cp .env.llm-local.example .env` (já vem configurado, sem chave).
+
 Edite o `.env` **no seu editor**. Nunca cole a chave no chat nem faça commit dela; o `.env` está no `.gitignore`.
 
 | Opção | `LLM_BASE_URL` | `LLM_API_KEY` | `LLM_MODEL` | Observação |
