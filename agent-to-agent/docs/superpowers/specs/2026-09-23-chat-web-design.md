@@ -54,7 +54,7 @@ Na UI, erro vira um aviso no chat (bolha de sistema) sem apagar o histórico da 
 - `docker-compose.yml`: serviço `chat-web`, `3000:3000`, `ANA_URL=http://ana-agent:8080`, `depends_on: ana-agent: service_healthy`, healthcheck em `/api/health`.
 - Makefile: `run-web` (`npm run dev`, `ANA_URL` default `http://localhost:8080`), `test-web` (typecheck + lint + vitest), `build` inclui `npm ci && npm run build` do chat-web.
 - `smoke-test.sh`: checa `GET http://localhost:3000/api/health` = 200.
-- README: seção "Chat web".
+- README: alvos `run-web`/`test-web`, seção **Fluxo ponta a ponta** com diagrama Mermaid (sequência do navegador até os MCP servers e o retorno, com as classes chamadas em cada etapa) e seção **Objetos do fluxo** (tabela: objeto, app, como funciona).
 
 ## 5. Testes
 
