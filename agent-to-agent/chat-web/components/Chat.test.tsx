@@ -15,6 +15,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+const SESSION_ID_INICIAL = "sessao-inicial";
+
+function renderChat() {
+  return render(<Chat sessionIdInicial={SESSION_ID_INICIAL} />);
+}
+
 async function enviar(texto: string) {
   const user = userEvent.setup();
   await user.type(screen.getByLabelText("Mensagem"), texto);
@@ -27,7 +33,7 @@ describe("Chat", () => {
     fetchMock.mockResolvedValue(
       Response.json({ sessionId: "s", reply: "Seu dinheiro estava aplicado onde?", debug: null }),
     );
-    render(<Chat />);
+    renderChat();
 
     await enviar("meu dinheiro sumiu");
 
@@ -44,7 +50,19 @@ describe("Chat", () => {
     const corpo = JSON.parse(init.body);
     expect(corpo.customerId).toBe("cli-001");
     expect(corpo.message).toBe("meu dinheiro sumiu");
-    expect(corpo.sessionId).toBe(screen.getByTestId("session-id").textContent);
+    expect(corpo.sessionId).toBe(SESSION_ID_INICIAL);
+    expect(screen.getByTestId("session-id").textContent).toBe(SESSION_ID_INICIAL);
+  });
+
+  it("envia a mensagem ao pressionar Enter no campo de texto", async () => {
+    fetchMock.mockResolvedValue(Response.json({ sessionId: "s", reply: "olá", debug: null }));
+    renderChat();
+    const user = userEvent.setup();
+
+    await user.type(screen.getByLabelText("Mensagem"), "oi{Enter}");
+
+    expect(await screen.findByText("olá")).toHaveAttribute("data-autor", "ana");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).message).toBe("oi");
   });
 
   it("preenche o painel de debug quando a Ana delegou ao especialista", async () => {
@@ -61,7 +79,7 @@ describe("Chat", () => {
         },
       }),
     );
-    render(<Chat />);
+    renderChat();
 
     await enviar("estava em investimentos");
 
@@ -74,7 +92,7 @@ describe("Chat", () => {
 
   it("mostra aviso quando a Ana está indisponível, mantendo o histórico", async () => {
     fetchMock.mockResolvedValue(Response.json({ error: MENSAGEM_ANA_INDISPONIVEL }, { status: 502 }));
-    render(<Chat />);
+    renderChat();
 
     await enviar("oi");
 
@@ -84,7 +102,7 @@ describe("Chat", () => {
 
   it("nova conversa limpa a tela e troca o sessionId", async () => {
     fetchMock.mockResolvedValue(Response.json({ sessionId: "s", reply: "olá", debug: null }));
-    render(<Chat />);
+    renderChat();
     const user = await enviar("oi");
     await screen.findByText("olá");
     const sessaoAnterior = screen.getByTestId("session-id").textContent;
@@ -98,12 +116,13 @@ describe("Chat", () => {
 
   it("trocar o cliente inicia nova conversa com o novo customerId", async () => {
     fetchMock.mockResolvedValue(Response.json({ sessionId: "s", reply: "olá", debug: null }));
-    render(<Chat />);
+    renderChat();
     const sessaoAnterior = screen.getByTestId("session-id").textContent;
 
     const user = userEvent.setup();
     await user.selectOptions(screen.getByLabelText("Cliente"), "cli-003");
     await enviar("oi");
+    await screen.findByText("olá");
 
     expect(screen.getByTestId("session-id").textContent).not.toBe(sessaoAnterior);
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).customerId).toBe("cli-003");
@@ -116,7 +135,7 @@ describe("Chat", () => {
         resolver = resolve;
       }),
     );
-    render(<Chat />);
+    renderChat();
 
     await enviar("oi");
 

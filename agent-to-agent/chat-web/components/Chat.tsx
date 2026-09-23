@@ -3,7 +3,7 @@
 import { type FormEvent, useState } from "react";
 import { CLIENTES } from "@/lib/clientes";
 import { MENSAGEM_ANA_INDISPONIVEL } from "@/lib/mensagens";
-import type { ChatResposta, ErroResposta } from "@/lib/tipos";
+import type { ChatRequisicao, ChatResposta, ErroResposta } from "@/lib/tipos";
 import styles from "./Chat.module.css";
 import { PainelDebug, type TurnoDebug } from "./PainelDebug";
 
@@ -16,9 +16,9 @@ type Mensagem = {
 let proximoId = 0;
 const novoId = () => ++proximoId;
 
-export function Chat() {
+export function Chat({ sessionIdInicial }: { sessionIdInicial: string }) {
   const [customerId, setCustomerId] = useState<string>(CLIENTES[0].id);
-  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
+  const [sessionId, setSessionId] = useState(sessionIdInicial);
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
   const [turnos, setTurnos] = useState<TurnoDebug[]>([]);
   const [texto, setTexto] = useState("");
@@ -40,10 +40,11 @@ export function Chat() {
     setEnviando(true);
     setMensagens((atuais) => [...atuais, { id: novoId(), autor: "cliente", texto: mensagem }]);
     try {
+      const requisicao: ChatRequisicao = { sessionId, customerId, message: mensagem };
       const resposta = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, customerId, message: mensagem }),
+        body: JSON.stringify(requisicao),
       });
       if (!resposta.ok) {
         const erro = (await resposta.json()) as ErroResposta;
