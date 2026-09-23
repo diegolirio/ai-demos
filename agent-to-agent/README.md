@@ -8,6 +8,21 @@ cliente ─POST /chat─▶ ana-agent:8080 ─A2A JSON-RPC─▶ investimentos-a
                                                                                └─MCP─▶ tracking-money-mcp:8082
 ```
 
+```mermaid
+graph LR
+      Ana[ana-agent :8080]
+      Invest[investimentos-agent :8081]
+      CDB[cdb-mcp :8083]
+      TM[tracking-money-mcp :8082]
+  
+      Ana -->|A2A JSON-RPC| Invest
+      Invest -->|MCP| CDB
+      Invest -->|MCP| TM
+```
+UI
+<img width="1383" height="707" alt="image" src="https://github.com/user-attachments/assets/a70736cc-3c97-4ed9-bd88-228ff38bbe0d" />
+
+
 ## Rodando
 
 > Passo a passo completo para testar e explorar (LLM, chat web, hops, falhas): [docs/GUIA-TESTES.md](docs/GUIA-TESTES.md).
