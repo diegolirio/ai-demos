@@ -92,5 +92,6 @@ services:
         condition: service_healthy
     healthcheck:
       <<: *healthcheck
-      # node:24-alpine não tem curl; wget do busybox resolve
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health >/dev/null || exit 1"]
+      # node:24-alpine não tem curl; wget do busybox resolve. 127.0.0.1 (não localhost):
+      # o server standalone do Next liga em 0.0.0.0 e o busybox pode resolver localhost para ::1.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1"]

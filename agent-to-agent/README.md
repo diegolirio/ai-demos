@@ -10,7 +10,8 @@ cliente ─POST /chat─▶ ana-agent:8080 ─A2A JSON-RPC─▶ investimentos-a
 
 ## Rodando
 
-Pré-requisitos: JDK 25 (`$HOME/.sdkman/candidates/java/25.0.2-tem`, ou `make JAVA_HOME=...`), Maven, Docker, `jq`.
+Pré-requisitos: JDK 25 (`$HOME/.sdkman/candidates/java/25.0.2-tem`, ou `make JAVA_HOME=...`), Maven, Docker, `jq`,
+Node 24 + npm (Next 16 exige Node ≥ 20.9; `make up` roda `build`, que executa `npm ci && npm run build` do chat-web no host).
 
 ```bash
 cp .env.example .env    # preencha LLM_BASE_URL / LLM_API_KEY / LLM_MODEL
@@ -168,7 +169,7 @@ Se o especialista estiver fora, der timeout (90s) ou a Task terminar diferente d
 | `JSONRPCHandler` / `DefaultRequestHandler` | investimentos-agent (SDK a2a-java) | Ciclo de vida da Task: cria, enfileira, executa o `AgentExecutor` e agrega os eventos até o estado final. |
 | `InvestimentosAgentExecutor` | investimentos-agent | `AgentExecutor`. Extrai o `customerId` do DataPart, chama o especialista com a memória do `contextId`, publica o artifact `[TextPart, DataPart §9]` e dá `complete()`, ou `fail()` em caso de erro. |
 | `EspecialistaInvestimentos` (criado por `EspecialistaFactory`) | investimentos-agent | AI Service com as tools MCP. Decide sozinho quais tools chamar (autonomia do especialista) e devolve `RespostaEspecialista` no schema §9. |
-| `ToolProviderComLog` / `McpToolProvider` | investimentos-agent | Na montagem do especialista, descobre as tools dos dois MCP servers (Streamable HTTP em `/mcp`) e envolve o executor de cada uma com `ToolExecutorComLog`. |
+| `ToolProviderComLog` / `McpToolProvider` | investimentos-agent | A cada chamada do especialista (`investigar`), descobre as tools dos dois MCP servers (Streamable HTTP em `/mcp`) e envolve o executor de cada uma com `ToolExecutorComLog`. |
 | `ToolExecutorComLog` / `DefaultMcpClient` | investimentos-agent | Em cada chamada de tool feita pelo LLM: loga tool, `contextId` (memoryId) e duração, e executa a chamada MCP `tools/call` via `DefaultMcpClient`; erros sobem inalterados para o LangChain4j devolver ao LLM. |
 | `SQLChatMemoryStore` (em `EspecialistaConfig`) | investimentos-agent | Memória do especialista no Postgres (schema `investimentos`), por `contextId` A2A. |
 | `CdbTools` / `CdbRepository` | cdb-mcp | Tools `listar_posicoes_cdb` e `listar_resgates_cdb` (entrada `customerId`, JSON Schema estrito), com dados mock em memória. |
