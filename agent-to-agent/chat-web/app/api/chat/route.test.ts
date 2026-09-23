@@ -72,4 +72,33 @@ describe("POST /api/chat", () => {
     expect(resposta.status).toBe(400);
     expect(await resposta.json()).toEqual({ error: MENSAGEM_REQUISICAO_INVALIDA });
   });
+
+  it("devolve 502 quando a Ana responde um não-2xx diferente de 400 (ex.: 404 de ANA_URL errado)", async () => {
+    fetchMock.mockResolvedValue(new Response("not found", { status: 404 }));
+
+    const resposta = await POST(requisicao());
+
+    expect(resposta.status).toBe(502);
+    expect(await resposta.json()).toEqual({ error: MENSAGEM_ANA_INDISPONIVEL });
+  });
+
+  it("devolve 502 quando a Ana responde 2xx com corpo que não é JSON válido", async () => {
+    fetchMock.mockResolvedValue(new Response("<html>não é json</html>", { status: 200 }));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const resposta = await POST(requisicao());
+
+    expect(resposta.status).toBe(502);
+    expect(await resposta.json()).toEqual({ error: MENSAGEM_ANA_INDISPONIVEL });
+  });
+
+  it("devolve 502 quando a chamada para a Ana estoura o timeout", async () => {
+    fetchMock.mockRejectedValue(new DOMException("timeout", "TimeoutError"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const resposta = await POST(requisicao());
+
+    expect(resposta.status).toBe(502);
+    expect(await resposta.json()).toEqual({ error: MENSAGEM_ANA_INDISPONIVEL });
+  });
 });

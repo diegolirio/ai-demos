@@ -155,7 +155,7 @@ Se o especialista estiver fora, der timeout (90s) ou a Task terminar diferente d
 |---|---|---|
 | `Chat` (`components/Chat.tsx`) | chat-web | Client component. Guarda a conversa em memória, gera o `sessionId` com `crypto.randomUUID()`, permite trocar o cliente (nova sessão) e chama `POST /api/chat`. Mostra "Ana está digitando…" e avisos de erro. |
 | `PainelDebug` (`components/PainelDebug.tsx`) | chat-web | Um item por turno. Mostra o retorno do especialista (barra de `confidence`, `facts`, `risks`, `sources`) ou "sem delegação" quando `debug` é `null`. |
-| `POST /api/chat` (`app/api/chat/route.ts`) | chat-web | BFF: repassa o corpo para `${ANA_URL}/chat?debug=true` com timeout de 120s. Erro de rede ou 5xx vira 502 com mensagem amiga; outros erros viram 400. O navegador nunca fala com a Ana. |
+| `POST /api/chat` (`app/api/chat/route.ts`) | chat-web | BFF: repassa o corpo para `${ANA_URL}/chat?debug=true` com timeout de 120s. Erro de rede, timeout, 5xx, qualquer não-2xx diferente de 400 e 2xx com corpo não-JSON viram 502 com mensagem amiga; só 400 da Ana é repassado como 400. O navegador nunca fala com a Ana. |
 | `GET /api/health` (`app/api/health/route.ts`) | chat-web | Healthcheck do container (`{"status":"UP"}`). |
 | `ChatController` | ana-agent | `POST /chat`. Valida os campos, monta os `InvocationParameters` (`sessionId`, `customerId`, `requestId`), chama o `AnaAssistant` e, com `?debug=true`, anexa o §9 do turno. |
 | `AnaAssistant` (criado por `AnaFactory`) | ana-agent | AI Service do LangChain4j: prompt de triagem (`prompts/ana-system.txt`), memória por `sessionId` e uma única tool, `delegar_investimentos`. |

@@ -40,9 +40,11 @@
 **chat-web → Ana:** `POST ${ANA_URL}/chat?debug=true` com o mesmo corpo; resposta da Ana repassada como está: `{sessionId, reply, debug: {facts, answerDraft, confidence, risks, sources} | null}`.
 
 **Erros do proxy:**
-- Ana indisponível (erro de rede) ou status ≥ 500 → `502 {error: "A Ana está indisponível no momento. Tente novamente em instantes."}`.
+- Ana indisponível (erro de rede), timeout do proxy ou status ≥ 500 → `502 {error: "A Ana está indisponível no momento. Tente novamente em instantes."}`.
 - Status 400 da Ana → repassa `400` com `{error: "Requisição inválida."}`.
-- Timeout do proxy: 120s (acima dos 90s de timeout A2A da Ana).
+- Qualquer outro não-2xx (ex.: 404 por `ANA_URL` errado) → `502` (mesma mensagem acima), não `400`: só o 400 explícito da Ana é repassado como requisição inválida.
+- Resposta 2xx cujo corpo não é JSON válido → `502` (mesma mensagem), com o erro de parse logado no servidor.
+- Timeout do proxy: 120s (acima dos 90s de timeout A2A da Ana; cobre o caso comum, mas um turno delegado muito lento — LLM 60s + A2A 90s + LLM 60s — ainda pode estourar esse orçamento).
 
 **Health:** `GET /api/health` → `200 {status: "UP"}` (healthcheck do compose).
 
@@ -58,7 +60,7 @@ Na UI, erro vira um aviso no chat (bolha de sistema) sem apagar o histórico da 
 
 ## 5. Testes
 
-- Route handler `/api/chat` (fetch mockado): repassa corpo e `?debug=true`; devolve a resposta da Ana; 502 em erro de rede e em 5xx; 400 repassado.
+- Route handler `/api/chat` (fetch mockado): repassa corpo e `?debug=true`; devolve a resposta da Ana; 502 em erro de rede, timeout, 5xx, qualquer não-2xx diferente de 400 e 2xx com corpo não-JSON; 400 repassado apenas quando a Ana responde 400.
 - Route handler `/api/health`: 200.
 - Componente de chat (Testing Library, `fetch` mockado): enviar mensagem mostra bolha do cliente e depois da Ana; painel de debug preenchido quando há `debug`; "sem delegação" quando `debug` é nulo; aviso ao receber 502; Nova conversa limpa a tela e troca o `sessionId`.
 
