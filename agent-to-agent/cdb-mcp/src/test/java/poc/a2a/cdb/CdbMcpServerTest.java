@@ -82,6 +82,15 @@ class CdbMcpServerTest {
     }
 
     @Test
+    void cli005A008TemResgateLiquidadoDeDezMil() {
+        for (int i = 5; i <= 8; i++) {
+            assertThat(chamar("listar_resgates_cdb", "{\"customerId\":\"cli-00" + i + "\"}"))
+                    .contains("\"resgateId\":\"res-00" + i + "\"")
+                    .contains("\"status\":\"LIQUIDADO\"").contains("10000.00");
+        }
+    }
+
+    @Test
     void rejeitaEntradaForaDoSchema() {
         assertThatThrownBy(() -> chamar("listar_resgates_cdb", "{\"foo\":\"bar\"}"))
                 .isInstanceOf(ToolExecutionException.class)
