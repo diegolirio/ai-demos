@@ -1,4 +1,4 @@
-import type { RespostaEspecialista } from "@/lib/tipos";
+import type { RespostaEspecialista, SituacaoGarantia } from "@/lib/tipos";
 import styles from "./Chat.module.css";
 
 export type TurnoDebug = {
@@ -6,6 +6,8 @@ export type TurnoDebug = {
   mensagem: string;
   debug: RespostaEspecialista | null;
 };
+
+const BRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 function Lista({ titulo, itens }: { titulo: string; itens: string[] }) {
   return (
@@ -21,6 +23,27 @@ function Lista({ titulo, itens }: { titulo: string; itens: string[] }) {
         </ul>
       )}
     </div>
+  );
+}
+
+/** Onde está o dinheiro retido em conta garantia (cred-mcp). */
+function ContaGarantia({ situacao }: { situacao: SituacaoGarantia }) {
+  return (
+    <section className={styles.garantia} aria-label="Conta garantia">
+      <h4>Conta garantia</h4>
+      <dl>
+        <dt>status</dt>
+        <dd>{situacao.status}</dd>
+        <dt>resgatado</dt>
+        <dd>{BRL.format(situacao.valorResgatado)}</dd>
+        <dt>retido</dt>
+        <dd>{BRL.format(situacao.valorRetido)}</dd>
+        <dt>liberado</dt>
+        <dd>{BRL.format(situacao.valorLiberado)}</dd>
+        <dt>próximo passo</dt>
+        <dd>{situacao.proximoPasso}</dd>
+      </dl>
+    </section>
   );
 }
 
@@ -44,6 +67,7 @@ export function PainelDebug({ turnos }: { turnos: TurnoDebug[] }) {
               <Lista titulo="facts" itens={turno.debug.facts} />
               <Lista titulo="risks" itens={turno.debug.risks} />
               <Lista titulo="sources" itens={turno.debug.sources} />
+              {turno.debug.situacaoGarantia && <ContaGarantia situacao={turno.debug.situacaoGarantia} />}
             </>
           )}
         </section>

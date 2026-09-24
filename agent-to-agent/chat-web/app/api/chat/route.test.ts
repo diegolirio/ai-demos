@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MENSAGEM_ANA_INDISPONIVEL, MENSAGEM_REQUISICAO_INVALIDA } from "@/lib/mensagens";
 import { POST } from "./route";
 
-const corpo = { sessionId: "s-1", customerId: "cli-001", message: "meu dinheiro sumiu" };
+const corpo = { sessionId: "s-1", cpf: "111.001.001-05", message: "meu dinheiro sumiu" };
 
 function requisicao() {
   return new Request("http://localhost:3000/api/chat", {
@@ -100,5 +100,23 @@ describe("POST /api/chat", () => {
 
     expect(resposta.status).toBe(502);
     expect(await resposta.json()).toEqual({ error: MENSAGEM_ANA_INDISPONIVEL });
+  });
+
+  it("repassa o motivo do 400 da Ana", async () => {
+    fetchMock.mockResolvedValue(Response.json({ error: "CPF invalido" }, { status: 400 }));
+
+    const resposta = await POST(requisicao());
+
+    expect(resposta.status).toBe(400);
+    expect(await resposta.json()).toEqual({ error: "CPF invalido" });
+  });
+
+  it("usa a mensagem genérica quando o 400 da Ana não traz motivo", async () => {
+    fetchMock.mockResolvedValue(new Response("bad request", { status: 400 }));
+
+    const resposta = await POST(requisicao());
+
+    expect(resposta.status).toBe(400);
+    expect(await resposta.json()).toEqual({ error: MENSAGEM_REQUISICAO_INVALIDA });
   });
 });
