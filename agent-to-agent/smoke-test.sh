@@ -5,6 +5,7 @@ set -uo pipefail
 ANA_URL=${ANA_URL:-http://localhost:8080}
 WEB_URL=${WEB_URL:-http://localhost:3000}
 falhas=0
+contador_cenario=0
 
 chat() { # sessionId cpf mensagem
   curl -s -X POST "$ANA_URL/chat?debug=true" -H 'Content-Type: application/json' \
@@ -16,7 +17,8 @@ verificar() { # descricao condicao(0/1)
 }
 
 cenario() { # cpf palavra-esperada|BAIXA_CONFIANCA [facts-esperado] [status-garantia]
-  local cpf=$1 esperado=$2 factsEsperado=${3:-} garantiaEsperada=${4:-} sessao="smoke-${1//[^0-9]/}-$(date +%s)"
+  contador_cenario=$((contador_cenario + 1))
+  local cpf=$1 esperado=$2 factsEsperado=${3:-} garantiaEsperada=${4:-} sessao="smoke-c${contador_cenario}-$(date +%s)"
   echo "== $cpf"
   local r1 r2 reply conf facts garantia
   r1=$(chat "$sessao" "$cpf" "meu dinheiro sumiu")
@@ -45,13 +47,13 @@ cenario() { # cpf palavra-esperada|BAIXA_CONFIANCA [facts-esperado] [status-gara
 }
 
 retorno() { # cpf customerId — sessão 1 delega, sessão 2 (mesmo CPF) deve ter o atendimento no banco
-  local cpf=$1 cliente=$2 s1="smoke-ret1-$(date +%s)" s2="smoke-ret2-$(date +%s)" linhas
+  local cpf=$1 cliente=$2 s1="smoke-ret1-$(date +%s)" s2="smoke-ret2-$(date +%s)" linhas status
   echo "== retorno com o mesmo CPF ($cpf)"
   chat "$s1" "$cpf" "meu dinheiro sumiu" >/dev/null
   chat "$s1" "$cpf" "estava em investimentos e agora nao consigo encontrar" >/dev/null
   linhas=$(docker compose exec -T postgres psql -U agents -d agents -tAc \
-    "select count(*) from ana.atendimento where customer_id = '$cliente'")
-  [[ "${linhas:-0}" -ge 1 ]]; verificar "ana.atendimento tem registro de $cliente ($linhas)" $?
+    "select count(*) from ana.atendimento where customer_id = '$cliente' and session_id = '$s1'")
+  [[ "${linhas:-0}" -ge 1 ]]; verificar "ana.atendimento tem registro de $cliente na sessao $s1 ($linhas)" $?
   echo "  Ana (sessão nova): $(jq -r .reply <<<"$(chat "$s2" "$cpf" "oi, voltei")")"
   status=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$ANA_URL/chat" -H 'Content-Type: application/json' \
     -d '{"sessionId":"smoke-cpf","cpf":"123.456.789-09","message":"oi"}')
@@ -70,6 +72,12 @@ if [[ "${1:-}" == "--investimentos-fora" ]]; then
   grep -qi "instantes" <<<"$(jq -r .reply /tmp/smoke-fora.json)"; verificar "mensagem de indisponibilidade" $?
   exit $falhas
 fi
+
+# make smoke é rodável de novo: sem isto, na 2a execução toda sessão já tem historico e a Ana
+# abre com "Da ultima vez..." no turno 1, quebrando o grep de "onde" (regra 0 do prompt).
+echo "== limpando historico de atendimentos (execucao repetivel)"
+docker compose exec -T postgres psql -U agents -d agents \
+  -c "delete from ana.atendimento" 2>/dev/null || true
 
 echo "== chat-web"
 curl -sf "$WEB_URL/api/health" >/dev/null; verificar "chat-web /api/health responde 200" $?

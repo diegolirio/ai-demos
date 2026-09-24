@@ -12,16 +12,28 @@ public record SituacaoGarantia(String status, BigDecimal valorResgatado, BigDeci
         if (!(valor instanceof Map<?, ?> mapa) || mapa.get("status") == null) {
             return null;
         }
-        return new SituacaoGarantia(mapa.get("status").toString(), decimal(mapa.get("valorResgatado")),
-                decimal(mapa.get("valorRetido")), decimal(mapa.get("valorLiberado")),
+        BigDecimal valorResgatado = decimal(mapa.get("valorResgatado"));
+        BigDecimal valorRetido = decimal(mapa.get("valorRetido"));
+        BigDecimal valorLiberado = decimal(mapa.get("valorLiberado"));
+        if (valorResgatado == null || valorRetido == null || valorLiberado == null) {
+            return null;
+        }
+        return new SituacaoGarantia(mapa.get("status").toString(), valorResgatado, valorRetido, valorLiberado,
                 mapa.get("proximoPasso") == null ? "" : mapa.get("proximoPasso").toString());
     }
 
-    /** O DataPart pode trazer Double, Integer, BigDecimal ou String: normaliza para 2 casas. */
+    /**
+     * O DataPart pode trazer Double, Integer, BigDecimal ou String: normaliza para 2 casas.
+     * Nunca lanca: valor ausente ou nao numerico (incluindo NaN/Infinity) volta null.
+     */
     private static BigDecimal decimal(Object valor) {
         if (valor == null) {
             return null;
         }
-        return new BigDecimal(valor.toString()).setScale(2, RoundingMode.HALF_UP);
+        try {
+            return new BigDecimal(valor.toString()).setScale(2, RoundingMode.HALF_UP);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

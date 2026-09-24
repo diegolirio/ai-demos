@@ -200,7 +200,7 @@ docker compose exec postgres psql -U agents -d agents -c \
 |---|---|---|
 | Especialista fora | `make smoke-falha` (automático), ou `docker compose stop investimentos-agent` e conversar | Turno 2: a Ana responde "não consegui consultar seus investimentos agora…"; o chat não quebra (HTTP 200). Log `a2a.delegacao.erro` / `ana.tool.delegar_investimentos.indisponivel` |
 | Um MCP fora | `docker compose stop cdb-mcp` e conversar com `cli-001` | Esperado: o especialista continua respondendo; o erro da tool volta para o LLM, que deve citar a falha em `risks`, baixar a `confidence` e tirar `cdb-mcp` de `sources` (depende do modelo) |
-| cred-mcp fora | `docker compose stop cred-mcp` e conversar com `888.008.008-31` | o especialista responde sem a garantia, cita a falha em `risks` e baixa a `confidence` |
+| cred-mcp fora | `docker compose stop cred-mcp` e conversar com `888.008.008-31` | o especialista responde sem a informação da conta garantia; pode registrar a limitação em `risks` e baixar a `confidence` (depende do modelo) |
 | Ana fora | `docker compose stop ana-agent` e mandar mensagem no chat | Aviso "A Ana está indisponível no momento…" no chat, sem perder o histórico da tela |
 
 Para voltar ao normal:

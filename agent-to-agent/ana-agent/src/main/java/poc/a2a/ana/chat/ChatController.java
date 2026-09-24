@@ -69,7 +69,7 @@ public class ChatController {
             respostaEspecialista = ultimas.remover(requestId);
         }
         log.info("ana.chat sessionId={} cpf={} customerId={} comHistorico={} delegou={} durationMs={}",
-                requisicao.sessionId(), cpf.mascarado(), customerId, !"nenhum".equals(anteriores),
+                requisicao.sessionId(), cpf.mascarado(), customerId, !FormatadorAtendimentos.NENHUM.equals(anteriores),
                 respostaEspecialista != null, (System.nanoTime() - inicio) / 1_000_000);
         return new ChatResposta(requisicao.sessionId(), reply, debug ? respostaEspecialista : null);
     }
@@ -88,7 +88,7 @@ public class ChatController {
         } catch (RuntimeException e) {
             log.warn("ana.atendimento.leitura.falhou sessionId={} customerId={} erro={}", sessionId, customerId,
                     e.toString());
-            return "nenhum";
+            return FormatadorAtendimentos.NENHUM;
         }
     }
 
