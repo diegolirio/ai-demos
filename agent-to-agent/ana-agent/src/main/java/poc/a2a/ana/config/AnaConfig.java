@@ -87,7 +87,9 @@ public class AnaConfig {
 
     @Bean
     AnaAssistant anaAssistant(ChatModel chatModel, ChatMemoryProvider chatMemoryProvider,
-                              InvestimentosClient investimentosClient, UltimasRespostasInvestimentos ultimas) {
-        return AnaFactory.criar(chatModel, chatMemoryProvider, new DelegacaoInvestimentosTool(investimentosClient, ultimas));
+                              InvestimentosClient investimentosClient, UltimasRespostasInvestimentos ultimas,
+                              HistoricoAtendimentos historicoAtendimentos) {
+        return AnaFactory.criar(chatModel, chatMemoryProvider,
+                new DelegacaoInvestimentosTool(investimentosClient, ultimas, historicoAtendimentos));
     }
 }
