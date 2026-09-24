@@ -103,6 +103,20 @@ Também vale testar:
 - **Continuar a conversa** na mesma sessão (ex.: "e quando cai?"). A memória fica no Postgres por `sessionId`.
 - **"Nova conversa"** gera um novo `sessionId` (aparece no topo) e a Ana esquece o contexto — a menos que o CPF seja o mesmo (ver 4.1).
 
+### Jornada "solicitação de crédito" (Ana → cred-mcp direto, sem A2A)
+
+Pergunte, por exemplo, "minha solicitação de empréstimo foi recusada, por quê?". A Ana chama `consultar_solicitacoes_credito` já no primeiro turno. O painel mostra o bloco **Solicitações de crédito (MCP direto)**, com o `motivoCodigo` marcado como interno. A resposta da Ana **nunca** deve conter esse código.
+
+| CPF | O que a Ana deve dizer | O que olhar no painel |
+|---|---|---|
+| `999.009.009-28` | Empréstimo recusado: a parcela compromete a renda; sugere simular valor menor | `RECUSADA`, `RENDA_INSUFICIENTE` |
+| `101.010.010-61` | Cartão recusado: pendência no CPF; reavaliação após 23/10/2026 | `RECUSADA`, `RESTRICAO_CADASTRAL` |
+| `121.011.011-30` | Cartão aprovado; empréstimo recusado por conta recente, reavaliação após 15/01/2027 | `APROVADA` + `RECUSADA`, `RELACIONAMENTO_RECENTE` |
+| `131.012.012-92` | Empréstimo em análise, resposta em até 2 dias úteis | `EM_ANALISE` |
+| `111.001.001-05` | Não encontrou solicitações | lista vazia ("nenhuma solicitação") |
+
+Voltar depois com o mesmo CPF (`999.009.009-28`, "Nova conversa", "oi, voltei") faz a Ana lembrar do pedido recusado (linha `[credito]` no histórico).
+
 ---
 
 ## 4.1. Voltar depois com o mesmo CPF
@@ -114,7 +128,7 @@ Também vale testar:
 
 ```bash
 docker compose exec postgres psql -U agents -d agents -c \
-  "select criado_em, customer_id, session_id, garantia_status, resumo from ana.atendimento order by criado_em desc"
+  "select criado_em, customer_id, session_id, origem, garantia_status, resumo from ana.atendimento order by criado_em desc"
 ```
 
 ---
@@ -189,7 +203,7 @@ A cada delegação bem-sucedida, a Ana também grava em `ana.atendimento` (por `
 
 ```bash
 docker compose exec postgres psql -U agents -d agents -c \
-  "select criado_em, customer_id, session_id, garantia_status, resumo from ana.atendimento order by criado_em desc"
+  "select criado_em, customer_id, session_id, origem, garantia_status, resumo from ana.atendimento order by criado_em desc"
 ```
 
 ---
@@ -200,7 +214,7 @@ docker compose exec postgres psql -U agents -d agents -c \
 |---|---|---|
 | Especialista fora | `make smoke-falha` (automático), ou `docker compose stop investimentos-agent` e conversar | Turno 2: a Ana responde "não consegui consultar seus investimentos agora…"; o chat não quebra (HTTP 200). Log `a2a.delegacao.erro` / `ana.tool.delegar_investimentos.indisponivel` |
 | Um MCP fora | `docker compose stop cdb-mcp` e conversar com `cli-001` | Esperado: o especialista continua respondendo; o erro da tool volta para o LLM, que deve citar a falha em `risks`, baixar a `confidence` e tirar `cdb-mcp` de `sources` (depende do modelo) |
-| cred-mcp fora | `docker compose stop cred-mcp` e conversar com `888.008.008-31` | o especialista responde sem a informação da conta garantia; pode registrar a limitação em `risks` e baixar a `confidence` (depende do modelo) |
+| cred-mcp fora | `docker compose stop cred-mcp` e conversar com `888.008.008-31` (investimentos) e com `999.009.009-28` (crédito) | Investimentos: o especialista responde sem a conta garantia (pode registrar a limitação em `risks`). Crédito: a Ana responde "Não consegui consultar suas solicitações de crédito agora…" (HTTP 200, log `ana.tool.consultar_solicitacoes_credito.indisponivel`). Depois de `docker compose start cred-mcp`, a próxima pergunta de crédito funciona sem reiniciar a Ana (reconexão preguiçosa) |
 | Ana fora | `docker compose stop ana-agent` e mandar mensagem no chat | Aviso "A Ana está indisponível no momento…" no chat, sem perder o histórico da tela |
 
 Para voltar ao normal:

@@ -81,6 +81,8 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:?defina LLM_API_KEY no .env}
       LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
       INVESTIMENTOS_A2A_URL: http://investimentos-agent:8081
+      # MCP direto (solicitacoes de credito). Sem depends_on: a conexao e preguicosa e a Ana sobe sem o cred-mcp.
+      CRED_MCP_URL: http://cred-mcp:8084/mcp
       DB_URL: jdbc:postgresql://postgres:5432/agents?currentSchema=ana
     depends_on:
       postgres:

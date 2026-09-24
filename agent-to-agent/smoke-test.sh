@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Jornada "meu dinheiro sumiu" contra o compose. Asserções por palavra-chave (LLM não é determinístico).
+# Jornadas "meu dinheiro sumiu" (A2A) e "solicitacao de credito" (MCP direto) contra o compose. Asserções por palavra-chave (LLM não é determinístico).
 set -uo pipefail
 
 ANA_URL=${ANA_URL:-http://localhost:8080}
@@ -60,6 +60,33 @@ retorno() { # cpf customerId — sessão 1 delega, sessão 2 (mesmo CPF) deve te
   [[ "$status" == "400" ]]; verificar "CPF fora do cadastro -> 400" $?
 }
 
+cenario_credito() { # cpf mensagem status-esperado [motivoCodigo que nao pode vazar na resposta]
+  contador_cenario=$((contador_cenario + 1))
+  local cpf=$1 mensagem=$2 statusEsperado=$3 codigo=${4:-} sessao="smoke-cred${contador_cenario}-$(date +%s)"
+  echo "== $cpf (credito)"
+  local r reply statuses
+  r=$(chat "$sessao" "$cpf" "$mensagem")
+  reply=$(jq -r .reply <<<"$r")
+  statuses=$(jq -r '[.credito[]?.status] | join(",")' <<<"$r")
+  echo "  Ana: $reply"
+  echo "  credito (MCP direto): $(jq -c '[.credito[]? | {tipo, status, motivoCodigo}]' <<<"$r")"
+  [[ "$(jq -r '.credito | type' <<<"$r")" == "array" ]]; verificar "Ana consultou o cred-mcp direto (credito presente)" $?
+  grep -q "$statusEsperado" <<<"$statuses"; verificar "credito contem status $statusEsperado" $?
+  if [[ -n "$codigo" ]]; then
+    ! grep -q "$codigo" <<<"$reply"; verificar "resposta nao vaza o codigo interno $codigo" $?
+  fi
+}
+
+retorno_credito() { # cpf customerId — sessão 1 consulta crédito, sessão 2 (mesmo CPF) deve lembrar
+  local cpf=$1 cliente=$2 s1="smoke-rc1-$(date +%s)" s2="smoke-rc2-$(date +%s)" linhas
+  echo "== retorno com o mesmo CPF, credito ($cpf)"
+  chat "$s1" "$cpf" "minha solicitacao de emprestimo foi recusada, por que?" >/dev/null
+  linhas=$(docker compose exec -T postgres psql -U agents -d agents -tAc \
+    "select count(*) from ana.atendimento where customer_id = '$cliente' and session_id = '$s1' and origem = 'CREDITO'")
+  [[ "${linhas:-0}" -ge 1 ]]; verificar "ana.atendimento tem registro CREDITO de $cliente na sessao $s1 ($linhas)" $?
+  echo "  Ana (sessão nova): $(jq -r .reply <<<"$(chat "$s2" "$cpf" "oi, voltei")")"
+}
+
 if [[ "${1:-}" == "--investimentos-fora" ]]; then
   echo "== especialista fora do ar"
   sessao="smoke-fora-$(date +%s)"
@@ -91,6 +118,11 @@ cenario 666.006.006-59 "an[aá]lise" "" EM_ANALISE
 cenario 777.007.007-45 "fatura" "" RETIDO_ATE_PAGAMENTO_FATURA
 cenario 888.008.008-31 "6[.,]?500" "" RETIDO_PARCIAL
 retorno 888.008.008-31 cli-008
+cenario_credito 999.009.009-28 "minha solicitacao de emprestimo foi recusada, por que?" RECUSADA RENDA_INSUFICIENTE
+cenario_credito 101.010.010-61 "pedi um cartao de credito e foi recusado, qual o motivo?" RECUSADA RESTRICAO_CADASTRAL
+cenario_credito 121.011.011-30 "meu emprestimo foi recusado, por que?" RECUSADA RELACIONAMENTO_RECENTE
+cenario_credito 131.012.012-92 "como esta minha solicitacao de emprestimo?" EM_ANALISE
+retorno_credito 999.009.009-28 cli-009
 
 echo
 if [[ $falhas -eq 0 ]]; then echo "SMOKE OK"; else echo "SMOKE: $falhas falha(s)"; fi
