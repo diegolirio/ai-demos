@@ -6,6 +6,7 @@ Design: `docs/superpowers/specs/2026-09-22-a2a-poc-design.md`.
 ```
 cliente ─POST /chat─▶ ana-agent:8080 ─A2A JSON-RPC─▶ investimentos-agent:8081 ─MCP─▶ cdb-mcp:8083
                                                                                └─MCP─▶ tracking-money-mcp:8082
+                                                                               └─MCP─▶ cred-mcp:8084
 ```
 
 ```mermaid
@@ -14,10 +15,12 @@ graph LR
       Invest[investimentos-agent :8081]
       CDB[cdb-mcp :8083]
       TM[tracking-money-mcp :8082]
+      CRED[cred-mcp :8084]
   
       Ana -->|A2A JSON-RPC| Invest
       Invest -->|MCP| CDB
       Invest -->|MCP| TM
+      Invest -->|MCP| CRED
 ```
 UI
 <img width="1383" height="707" alt="image" src="https://github.com/user-attachments/assets/a70736cc-3c97-4ed9-bd88-228ff38bbe0d" />
@@ -35,7 +38,7 @@ cp .env.example .env    # preencha LLM_BASE_URL / LLM_API_KEY / LLM_MODEL
 make test               # só unitários (rápido, sem Docker nem LLM real)
 make test-integration   # testes de integração: Postgres + LLM real (Ollama) via Testcontainers — ver abaixo
 make up                 # build + compose, espera todos healthy — o chat fica em http://localhost:3000
-make smoke              # jornada completa para cli-001..cli-004
+make smoke              # jornada completa para os 8 CPFs de teste + retorno
 make smoke-falha        # derruba o especialista e confere o fallback da Ana
 make logs               # hops: ana.chat, ana.tool.delegar_investimentos, a2a.task.*, mcp.tool.call
 make down
@@ -50,7 +53,7 @@ Para depurar um serviço na IDE/terminal sem subir o compose inteiro — Postgre
 
 ```bash
 make db-up              # só o Postgres do compose (localhost:55432, schemas ana/investimentos)
-make run-mcps           # cdb-mcp :8083 + tracking-money-mcp :8082, saída prefixada, Ctrl+C encerra
+make run-mcps           # cdb-mcp :8083 + tracking-money-mcp :8082 + cred-mcp :8084, saída prefixada, Ctrl+C encerra
 make run-investimentos  # :8081 (db-up + carrega .env); precisa dos MCPs no ar
 make run-ana            # :8080 (db-up + carrega .env); delega para localhost:8081
 make db-down            # para o Postgres (mantém os dados)
@@ -116,12 +119,15 @@ sequenceDiagram
     end
     participant CDB as cdb-mcp (:8083)<br/>CdbTools / CdbRepository
     participant TM as tracking-money-mcp (:8082)<br/>TrackingMoneyTools / TrackingMoneyRepository
+    participant CRED as cred-mcp (:8084)<br/>ContaGarantiaTools / ContaGarantiaRepository
     participant LLM as LLM (OpenAI-compatible)
     participant PG as Postgres (chat_memory)
 
     U->>CH: digita a mensagem
-    CH->>BFF: POST /api/chat {sessionId, customerId, message}
+    CH->>BFF: POST /api/chat {sessionId, cpf, message}
     BFF->>CC: POST /chat?debug=true
+    CC->>CC: Cpf.de(cpf) + CadastroClientes → customerId (400 se inválido/desconhecido)
+    CC->>PG: HistoricoAtendimentos.recentesDeOutrasSessoes(customerId) [tabela atendimento]
     CC->>AA: conversar(sessionId, message, InvocationParameters)
     Note right of CC: InvocationParameters leva sessionId,<br/>customerId e requestId (fora do LLM)
     AA->>PG: SQLChatMemoryStore.getMessages(sessionId) [schema ana]
@@ -145,6 +151,9 @@ sequenceDiagram
         else tools de conta
             TP->>TM: MCP tools/call listar_movimentacoes / consultar_status_transferencia
             TM-->>TP: JSON com movimentações e status
+        else tool de conta garantia
+            TP->>CRED: MCP tools/call consultar_conta_garantia
+            CRED-->>TP: JSON com retenções (status, retido, liberado)
         end
         TP-->>ES: resultado da tool
     end
@@ -155,6 +164,7 @@ sequenceDiagram
     JR-->>AC: resultado JSON-RPC
     AC-->>DT: RespostaInvestimentos (lida do DataPart)
     DT->>DT: UltimasRespostasInvestimentos.registrar(requestId)
+    DT->>PG: HistoricoAtendimentos.registrar(customerId, sessionId, §9)
     DT-->>AA: paraTextoLlm()
     AA->>LLM: resultado da tool
     LLM-->>AA: resposta final no tom da Ana
@@ -171,12 +181,16 @@ Se o especialista estiver fora, der timeout (90s) ou a Task terminar diferente d
 
 | Objeto | App | Como funciona |
 |---|---|---|
-| `Chat` (`components/Chat.tsx`) | chat-web | Client component. Guarda a conversa em memória, gera o `sessionId` com `crypto.randomUUID()`, permite trocar o cliente (nova sessão) e chama `POST /api/chat`. Mostra "Ana está digitando…" e avisos de erro. |
-| `PainelDebug` (`components/PainelDebug.tsx`) | chat-web | Um item por turno. Mostra o retorno do especialista (barra de `confidence`, `facts`, `risks`, `sources`) ou "sem delegação" quando `debug` é `null`. |
-| `POST /api/chat` (`app/api/chat/route.ts`) | chat-web | BFF: repassa o corpo para `${ANA_URL}/chat?debug=true` com timeout de 120s. Erro de rede, timeout, 5xx, qualquer não-2xx diferente de 400 e 2xx com corpo não-JSON viram 502 com mensagem amiga; só 400 da Ana é repassado como 400. O navegador nunca fala com a Ana. |
+| `Chat` (`components/Chat.tsx`) | chat-web | Client component. Guarda a conversa em memória, gera o `sessionId` com `crypto.randomUUID()`, pede o CPF (campo + lista "CPFs de teste" que preenche e inicia), permite trocar o cliente (nova sessão) e chama `POST /api/chat`. Mostra "Ana está digitando…" e avisos de erro. |
+| `PainelDebug` (`components/PainelDebug.tsx`) | chat-web | Um item por turno. Mostra o retorno do especialista (barra de `confidence`, `facts`, `risks`, `sources`, bloco **Conta garantia** quando há `situacaoGarantia`) ou "sem delegação" quando `debug` é `null`. |
+| `POST /api/chat` (`app/api/chat/route.ts`) | chat-web | BFF: repassa o corpo para `${ANA_URL}/chat?debug=true` com timeout de 120s. Erro de rede, timeout, 5xx, qualquer não-2xx diferente de 400 e 2xx com corpo não-JSON viram 502 com mensagem amiga; só 400 da Ana é repassado como 400, com o `error` da Ana. O navegador nunca fala com a Ana. |
 | `GET /api/health` (`app/api/health/route.ts`) | chat-web | Healthcheck do container (`{"status":"UP"}`). |
-| `ChatController` | ana-agent | `POST /chat`. Valida os campos, monta os `InvocationParameters` (`sessionId`, `customerId`, `requestId`), chama o `AnaAssistant` e, com `?debug=true`, anexa o §9 do turno. |
+| `ChatController` | ana-agent | `POST /chat`. Valida os campos, resolve o CPF em `customerId` (400 se inválido/desconhecido), injeta o histórico de outras sessões no prompt, monta os `InvocationParameters` (`sessionId`, `customerId`, `requestId`), chama o `AnaAssistant` e, com `?debug=true`, anexa o §9 do turno. |
 | `AnaAssistant` (criado por `AnaFactory`) | ana-agent | AI Service do LangChain4j: prompt de triagem (`prompts/ana-system.txt`), memória por `sessionId` e uma única tool, `delegar_investimentos`. |
+| `Cpf` / `CadastroClientes` | ana-agent | Valida o CPF (dígitos verificadores) e resolve `customerId` num cadastro mock. O CPF só aparece mascarado em log e não vai ao LLM, à memória nem ao A2A. |
+| `HistoricoAtendimentos` / `JdbcHistoricoAtendimentos` | ana-agent | Um registro por delegação bem-sucedida na tabela `atendimento` (por `customerId`). O `ChatController` injeta os 3 mais recentes de outras sessões no system prompt (`@V("atendimentosAnteriores")`), formatados pelo `FormatadorAtendimentos`. |
+| `SituacaoGarantia` | investimentos-agent e ana-agent | Campo opcional do §9 (`status`, `valorResgatado`, `valorRetido`, `valorLiberado`, `proximoPasso`). O executor A2A descarta valores inconsistentes e registra em `risks`. |
+| `ContaGarantiaTools` / `ContaGarantiaRepository` | cred-mcp | Tool `consultar_conta_garantia` (`customerId`): retenções em conta garantia por gastos no cartão, com dados mock em memória. |
 | `DelegacaoInvestimentosTool` | ana-agent | `@Tool delegar_investimentos`. Lê `customerId` e `sessionId` dos `InvocationParameters` (nunca do LLM), chama o cliente A2A, registra o §9 para o debug e devolve texto ao LLM, ou `INDISPONIVEL:` em caso de falha. |
 | `UltimasRespostasInvestimentos` | ana-agent | Guarda o §9 por `requestId` durante a requisição, para o `ChatController` devolver no `debug`. |
 | `InvestimentosA2aClient` | ana-agent | Cliente a2a-java. Resolve o Agent Card a cada chamada, envia `SendMessage` (TextPart + DataPart `customerId`, `contextId = sessionId`), impõe timeout de 90s com cancelamento e extrai o DataPart §9 da Task. |
@@ -186,33 +200,39 @@ Se o especialista estiver fora, der timeout (90s) ou a Task terminar diferente d
 | `JSONRPCHandler` / `DefaultRequestHandler` | investimentos-agent (SDK a2a-java) | Ciclo de vida da Task: cria, enfileira, executa o `AgentExecutor` e agrega os eventos até o estado final. |
 | `InvestimentosAgentExecutor` | investimentos-agent | `AgentExecutor`. Extrai o `customerId` do DataPart, chama o especialista com a memória do `contextId`, publica o artifact `[TextPart, DataPart §9]` e dá `complete()`, ou `fail()` em caso de erro. |
 | `EspecialistaInvestimentos` (criado por `EspecialistaFactory`) | investimentos-agent | AI Service com as tools MCP. Decide sozinho quais tools chamar (autonomia do especialista) e devolve `RespostaEspecialista` no schema §9. |
-| `ToolProviderComLog` / `McpToolProvider` | investimentos-agent | A cada chamada do especialista (`investigar`), descobre as tools dos dois MCP servers (Streamable HTTP em `/mcp`) e envolve o executor de cada uma com `ToolExecutorComLog`. |
+| `ToolProviderComLog` / `McpToolProvider` | investimentos-agent | A cada chamada do especialista (`investigar`), descobre as tools dos três MCP servers (Streamable HTTP em `/mcp`) e envolve o executor de cada uma com `ToolExecutorComLog`. |
 | `ToolExecutorComLog` / `DefaultMcpClient` | investimentos-agent | Em cada chamada de tool feita pelo LLM: loga tool, `contextId` (memoryId) e duração, e executa a chamada MCP `tools/call` via `DefaultMcpClient`; erros sobem inalterados para o LangChain4j devolver ao LLM. |
 | `SQLChatMemoryStore` (em `EspecialistaConfig`) | investimentos-agent | Memória do especialista no Postgres (schema `investimentos`), por `contextId` A2A. |
 | `CdbTools` / `CdbRepository` | cdb-mcp | Tools `listar_posicoes_cdb` e `listar_resgates_cdb` (entrada `customerId`, JSON Schema estrito), com dados mock em memória. |
 | `TrackingMoneyTools` / `TrackingMoneyRepository` | tracking-money-mcp | Tools `listar_movimentacoes` (`customerId`) e `consultar_status_transferencia` (`transferenciaId`), com dados mock em memória. |
-| `McpServerConfig` | cdb-mcp e tracking-money-mcp | Registra o servlet `HttpServletStreamableServerTransportProvider` em `/mcp` e o `McpSyncServer` com as tools. |
+| `McpServerConfig` | cdb-mcp, tracking-money-mcp e cred-mcp | Registra o servlet `HttpServletStreamableServerTransportProvider` em `/mcp` e o `McpSyncServer` com as tools. |
 | LLM | externo | Endpoint compatível com OpenAI configurado por `LLM_BASE_URL`, `LLM_API_KEY` e `LLM_MODEL`, usado pela Ana e pelo especialista. |
-| Postgres | infra (compose) | Uma instância com os schemas `ana` e `investimentos`, cada um com sua tabela `chat_memory`. |
+| Postgres | infra (compose) | Uma instância com os schemas `ana` e `investimentos`; `ana` tem `chat_memory` e `atendimento`, `investimentos` tem `chat_memory`. |
 
 ## Conversa manual
 
 ```bash
 curl -s -X POST 'localhost:8080/chat?debug=true' -H 'Content-Type: application/json' \
-  -d '{"sessionId":"s1","customerId":"cli-001","message":"meu dinheiro sumiu"}' | jq
+  -d '{"sessionId":"s1","cpf":"111.001.001-05","message":"meu dinheiro sumiu"}' | jq
 curl -s -X POST 'localhost:8080/chat?debug=true' -H 'Content-Type: application/json' \
-  -d '{"sessionId":"s1","customerId":"cli-001","message":"estava em investimentos e agora nao consigo encontrar"}' | jq
+  -d '{"sessionId":"s1","cpf":"111.001.001-05","message":"estava em investimentos e agora nao consigo encontrar"}' | jq
 curl -s localhost:8081/.well-known/agent-card.json | jq
 ```
 
 ## Cenários mock
 
-| customerId | Situação | Esperado |
-|---|---|---|
-| cli-001 | Resgate CDB em liquidação, crédito processando | "em liquidação, aguarde alguns minutos" |
-| cli-002 | Resgate liquidado, crédito na conta | "já está na sua conta" |
-| cli-003 | CDB ativo, sem resgate | "continua aplicado" |
-| cli-004 | Nada encontrado | confidence < 0.5, encaminha para humano |
+| CPF | customerId | Situação | Esperado |
+|---|---|---|---|
+| 111.001.001-05 | cli-001 | Resgate CDB em liquidação, crédito processando | "em liquidação, aguarde alguns minutos" |
+| 222.002.002-93 | cli-002 | Resgate liquidado, crédito na conta | "já está na sua conta" |
+| 333.003.003-80 | cli-003 | CDB ativo, sem resgate | "continua aplicado" |
+| 444.004.004-76 | cli-004 | Nada encontrado | confidence < 0.5, encaminha para humano |
+| 555.005.005-62 | cli-005 | Resgate passou pela conta garantia e foi liberado | `LIBERADO_CONTA`, "já está na sua conta" |
+| 666.006.006-59 | cli-006 | Resgate na conta garantia em análise (gastos no cartão) | `EM_ANALISE`, "em análise, sem prazo" |
+| 777.007.007-45 | cli-007 | Resgate retido até pagar a fatura (gasto R$ 12.000) | `RETIDO_ATE_PAGAMENTO_FATURA`, fatura vence 05/10 |
+| 888.008.008-31 | cli-008 | Gasto R$ 3.500: R$ 6.500 liberados, R$ 3.500 retidos | `RETIDO_PARCIAL` |
+
+Voltar depois: com o mesmo CPF, clique em **Nova conversa** — a Ana abre lembrando do atendimento anterior (tabela `ana.atendimento`).
 
 ## Achados técnicos (Spring Boot + a2a-java)
 

@@ -66,19 +66,20 @@ make ps          # todos devem aparecer "healthy"
 | investimentos-agent | http://localhost:8081/.well-known/agent-card.json |
 | tracking-money-mcp | http://localhost:8082/actuator/health |
 | cdb-mcp | http://localhost:8083/actuator/health |
+| cred-mcp | http://localhost:8084/actuator/health |
 | Postgres | `localhost:55432` (usuário, senha e banco: `agents`) |
 
 Validação automática da jornada:
 
 ```bash
-make smoke       # cli-001..cli-004 + health do chat-web → "SMOKE OK"
+make smoke       # 8 CPFs de teste + retorno + health do chat-web → "SMOKE OK"
 ```
 
 ---
 
 ## 4. Explorar pelo chat web
 
-Abra **http://localhost:3000** e siga o roteiro para cada cliente. Use o seletor no topo; trocar de cliente inicia uma nova sessão.
+Abra **http://localhost:3000**. O chat pede o **CPF** antes de liberar a conversa; a lista **"CPFs de teste"** preenche o campo e já inicia a sessão. Trocar de CPF inicia uma nova sessão.
 
 1. Envie: `meu dinheiro sumiu`
    - A Ana pergunta onde o dinheiro estava aplicado.
@@ -87,16 +88,34 @@ Abra **http://localhost:3000** e siga o roteiro para cada cliente. Use o seletor
    - A Ana delega ao especialista via A2A.
    - O painel de debug mostra `confidence`, `facts`, `risks` e `sources`.
 
-| Cliente | O que esperar na resposta | O que olhar no debug |
+| CPF | O que a Ana deve dizer | O que olhar no painel |
 |---|---|---|
-| `cli-001` | Resgate em liquidação, cai na conta em alguns minutos | `facts` com `EM_LIQUIDACAO` e crédito `PROCESSANDO`; `sources` com os 2 MCPs |
-| `cli-002` | O dinheiro já está na conta | `facts` com `LIQUIDADO` e crédito `CONCLUIDA` |
-| `cli-003` | Continua aplicado no CDB | posição `pos-003`, sem resgates |
-| `cli-004` | Não encontrou; encaminha para atendimento humano | `confidence` < 0.5 e `risks` preenchido |
+| `111.001.001-05` | Resgate em liquidação, cai na conta em alguns minutos | `facts` com `EM_LIQUIDACAO` e crédito `PROCESSANDO`; `sources` com os MCPs |
+| `222.002.002-93` | O dinheiro já está na conta | `facts` com `LIQUIDADO` e crédito `CONCLUIDA` |
+| `333.003.003-80` | Continua aplicado no CDB | posição `pos-003`, sem resgates |
+| `444.004.004-76` | Não encontrou; encaminha para atendimento humano | `confidence` < 0.5 e `risks` preenchido |
+| `555.005.005-62` | Já está na conta (passou pela conta garantia e foi liberado) | bloco **Conta garantia** com `LIBERADO_CONTA`; `cred-mcp` em `sources` |
+| `666.006.006-59` | Em análise, sem prazo definido | bloco **Conta garantia** com `EM_ANALISE`; `cred-mcp` em `sources` |
+| `777.007.007-45` | Retido até o pagamento da fatura (vence 05/10) | bloco **Conta garantia** com `RETIDO_ATE_PAGAMENTO_FATURA`; `cred-mcp` em `sources` |
+| `888.008.008-31` | Parte liberada (R$ 6.500), parte retida (R$ 3.500) | bloco **Conta garantia** com `RETIDO_PARCIAL`; `cred-mcp` em `sources` |
 
 Também vale testar:
 - **Continuar a conversa** na mesma sessão (ex.: "e quando cai?"). A memória fica no Postgres por `sessionId`.
-- **"Nova conversa"** gera um novo `sessionId` (aparece no topo) e a Ana esquece o contexto.
+- **"Nova conversa"** gera um novo `sessionId` (aparece no topo) e a Ana esquece o contexto — a menos que o CPF seja o mesmo (ver 4.1).
+
+---
+
+## 4.1. Voltar depois com o mesmo CPF
+
+1. CPF `888.008.008-31`, envie "meu dinheiro sumiu" e depois "estava em investimentos e agora não consigo encontrar" — a Ana explica a retenção parcial.
+2. Clique em **Nova conversa** (mesmo CPF, `sessionId` novo) e diga "oi, voltei".
+3. Esperado: a Ana cita o atendimento anterior e pergunta se é o mesmo assunto; se responder "sim", ela delega de novo.
+4. Conferir no banco:
+
+```bash
+docker compose exec postgres psql -U agents -d agents -c \
+  "select criado_em, customer_id, session_id, garantia_status, resumo from ana.atendimento order by criado_em desc"
+```
 
 ---
 
@@ -126,14 +145,16 @@ ana.chat ... delegou=true durationMs=...
 
 ### 5.2 Falar com a Ana direto (sem o front)
 
+A Ana recebe `cpf` (valida e resolve `customerId` no cadastro mock); o CPF para na Ana e não segue no A2A.
+
 ```bash
 curl -s -X POST 'localhost:8080/chat?debug=true' -H 'Content-Type: application/json' \
-  -d '{"sessionId":"explorar-1","customerId":"cli-001","message":"meu dinheiro sumiu"}' | jq
+  -d '{"sessionId":"explorar-1","cpf":"111.001.001-05","message":"meu dinheiro sumiu"}' | jq
 ```
 
 ```bash
 curl -s -X POST 'localhost:8080/chat?debug=true' -H 'Content-Type: application/json' \
-  -d '{"sessionId":"explorar-1","customerId":"cli-001","message":"estava em investimentos e nao encontro"}' | jq
+  -d '{"sessionId":"explorar-1","cpf":"111.001.001-05","message":"estava em investimentos e nao encontro"}' | jq
 ```
 
 ### 5.3 Falar A2A com o especialista (sem a Ana)
@@ -164,6 +185,13 @@ docker compose exec postgres psql -U agents -d agents -c 'select * from ana.chat
 
 A Ana guarda uma linha por `sessionId` (schema `ana`). O especialista guarda uma por `contextId` A2A (schema `investimentos`), com as chamadas e os resultados das tools.
 
+A cada delegação bem-sucedida, a Ana também grava em `ana.atendimento` (por `customerId`):
+
+```bash
+docker compose exec postgres psql -U agents -d agents -c \
+  "select criado_em, customer_id, session_id, garantia_status, resumo from ana.atendimento order by criado_em desc"
+```
+
 ---
 
 ## 6. Experimentos de falha
@@ -172,12 +200,13 @@ A Ana guarda uma linha por `sessionId` (schema `ana`). O especialista guarda uma
 |---|---|---|
 | Especialista fora | `make smoke-falha` (automático), ou `docker compose stop investimentos-agent` e conversar | Turno 2: a Ana responde "não consegui consultar seus investimentos agora…"; o chat não quebra (HTTP 200). Log `a2a.delegacao.erro` / `ana.tool.delegar_investimentos.indisponivel` |
 | Um MCP fora | `docker compose stop cdb-mcp` e conversar com `cli-001` | Esperado: o especialista continua respondendo; o erro da tool volta para o LLM, que deve citar a falha em `risks`, baixar a `confidence` e tirar `cdb-mcp` de `sources` (depende do modelo) |
+| cred-mcp fora | `docker compose stop cred-mcp` e conversar com `888.008.008-31` | o especialista responde sem a garantia, cita a falha em `risks` e baixa a `confidence` |
 | Ana fora | `docker compose stop ana-agent` e mandar mensagem no chat | Aviso "A Ana está indisponível no momento…" no chat, sem perder o histórico da tela |
 
 Para voltar ao normal:
 
 ```bash
-docker compose start investimentos-agent cdb-mcp ana-agent
+docker compose start investimentos-agent cdb-mcp cred-mcp ana-agent
 ```
 
 ---
@@ -188,7 +217,7 @@ Use para colocar breakpoints. No `.env`, o `LLM_BASE_URL` precisa ser alcançáv
 
 | Terminal | Comando | Porta |
 |---|---|---|
-| 1 | `make run-mcps` | 8083 e 8082 |
+| 1 | `make run-mcps` | 8083, 8082 e 8084 |
 | 2 | `make run-investimentos` (sobe o Postgres do compose; espera os MCPs) | 8081 |
 | 3 | `make run-ana` | 8080 |
 | 4 | `make run-web` | 3000 |
