@@ -69,7 +69,10 @@ public class EspecialistaConfig {
                 .build();
     }
 
-    /** Tools da jornada de investimentos. consultar_solicitacoes_credito (cred-mcp) e da Ana, nao do especialista. */
+    /**
+     * Tools da jornada de investimentos. consultar_solicitacoes_credito (cred-mcp) e da Ana, nao do especialista.
+     * Allowlist: uma tool nova de um MCP do especialista tambem precisa ser adicionada aqui, senao fica oculta.
+     */
     static final List<String> TOOLS_DO_ESPECIALISTA = List.of("listar_posicoes_cdb", "listar_resgates_cdb",
             "listar_movimentacoes", "consultar_status_transferencia", "consultar_conta_garantia");
 
