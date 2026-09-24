@@ -47,4 +47,17 @@ class JdbcHistoricoAtendimentosIT extends BaseIntegrationTest {
         assertThat(historico.recentesDeOutrasSessoes("cli-005", "nova", 3))
                 .extracting(Atendimento::resumo).containsExactly("atendimento 5", "atendimento 4", "atendimento 3");
     }
+
+    @Test
+    void registraCreditoComOrigem() {
+        historico.registrar("cli-011", "sess-1", resposta("investimentos", null));
+        historico.registrarCredito("cli-011", "sess-2", "EMPRESTIMO_PESSOAL RECUSADA (conta recente)");
+
+        List<Atendimento> anteriores = historico.recentesDeOutrasSessoes("cli-011", "nova", 3);
+
+        assertThat(anteriores).extracting(Atendimento::origem).containsExactly(Origem.CREDITO, Origem.INVESTIMENTOS);
+        assertThat(anteriores.getFirst().resumo()).isEqualTo("EMPRESTIMO_PESSOAL RECUSADA (conta recente)");
+        assertThat(anteriores.getFirst().confidence()).isEqualTo(1.0);
+        assertThat(anteriores.getFirst().situacaoGarantia()).isNull();
+    }
 }

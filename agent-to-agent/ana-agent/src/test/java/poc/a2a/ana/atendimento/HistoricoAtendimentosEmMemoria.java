@@ -21,6 +21,12 @@ public class HistoricoAtendimentosEmMemoria implements HistoricoAtendimentos {
     }
 
     @Override
+    public synchronized void registrarCredito(String customerId, String sessionId, String resumo) {
+        registros.add(new Registro(customerId, sessionId,
+                new Atendimento(OffsetDateTime.now(), resumo, 1.0, null, Origem.CREDITO)));
+    }
+
+    @Override
     public synchronized List<Atendimento> recentesDeOutrasSessoes(String customerId, String sessionIdAtual, int limite) {
         return registros.reversed().stream()
                 .filter(r -> r.customerId().equals(customerId) && !r.sessionId().equals(sessionIdAtual))

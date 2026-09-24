@@ -59,4 +59,13 @@ class FormatadorAtendimentosTest {
         assertThat(FormatadorAtendimentos.formatar(List.of(atendimento)))
                 .isEqualTo("22/09 14:03 — resgate [garantia: EM_ANALISE, liberado ?, retido ?]");
     }
+
+    @Test
+    void atendimentoDeCreditoTemPrefixo() {
+        Atendimento credito = new Atendimento(OffsetDateTime.of(2026, 9, 22, 17, 3, 0, 0, ZoneOffset.UTC),
+                "EMPRESTIMO_PESSOAL RECUSADA (renda insuficiente)", 1.0, null, Origem.CREDITO);
+
+        assertThat(FormatadorAtendimentos.formatar(List.of(credito)))
+                .isEqualTo("22/09 14:03 — [credito] EMPRESTIMO_PESSOAL RECUSADA (renda insuficiente)");
+    }
 }
