@@ -58,7 +58,7 @@ function dataCurta(iso: string) {
 /** Solicitações de crédito que a Ana consultou direto no cred-mcp (McpClient, sem especialista). */
 function SolicitacoesCredito({ solicitacoes }: { solicitacoes: SolicitacaoCredito[] }) {
   return (
-    <section className={styles.credito} aria-label={'Solicitações de crédito'}>
+    <section className={styles.credito} aria-label="Solicitações de crédito">
       <h4>Solicitações de crédito (MCP direto)</h4>
       {solicitacoes.length === 0 ? (
         <p className={styles.vazio}>nenhuma solicitação</p>
@@ -103,12 +103,12 @@ function SolicitacoesCredito({ solicitacoes }: { solicitacoes: SolicitacaoCredit
 /** Um item por turno: retorno do especialista (A2A) e/ou consulta de crédito direta (MCP). */
 export function PainelDebug({ turnos }: { turnos: TurnoDebug[] }) {
   return (
-    <aside className={styles.painel} aria-label={'Debug do especialista'}>
+    <aside className={styles.painel} aria-label="Debug do especialista">
       <h2>Especialista (A2A) / Crédito (MCP)</h2>
       {turnos.length === 0 && <p className={styles.vazio}>Nenhum turno ainda.</p>}
       {turnos.map((turno) => (
         <section key={turno.id} className={styles.turno} data-testid="turno-debug">
-          <p className={styles.turnoMensagem}>&quot;{turno.mensagem}&quot;</p>
+          <p className={styles.turnoMensagem}>{'“'}{turno.mensagem}{'”'}</p>
           {turno.debug === null && turno.credito === null ? (
             <p className={styles.semDelegacao}>sem delegação</p>
           ) : (
