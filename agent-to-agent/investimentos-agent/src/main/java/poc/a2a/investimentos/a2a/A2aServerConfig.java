@@ -42,8 +42,9 @@ public class A2aServerConfig {
         return AgentCard.builder()
                 .name("investimentos-agent")
                 .description("Especialista de investimentos: localiza dinheiro do cliente em investimentos (CDB), "
-                        + "verifica resgates, liquidacao e credito em conta. Responde no schema padrao "
-                        + "(facts, answerDraft, confidence, risks, sources) em um DataPart.")
+                        + "verifica resgates, liquidacao, credito em conta e retencao em conta garantia por gastos no "
+                        + "cartao. Responde no schema padrao (facts, answerDraft, confidence, risks, sources, "
+                        + "situacaoGarantia) em um DataPart.")
                 .version("1.0.0")
                 .supportedInterfaces(List.of(new AgentInterface(TransportProtocol.JSONRPC.asString(), publicUrl)))
                 .capabilities(AgentCapabilities.builder()
@@ -56,9 +57,9 @@ public class A2aServerConfig {
                         .id("localizar-dinheiro-investimentos")
                         .name("Localizar dinheiro em investimentos")
                         .description("Descobre onde esta o dinheiro que o cliente tinha em investimentos: "
-                                + "aplicado, em liquidacao de resgate ou ja creditado na conta. "
+                                + "aplicado, em liquidacao de resgate, retido em conta garantia ou ja creditado na conta. "
                                 + "Envie a intencao em texto e um DataPart {\"customerId\": \"...\"}.")
-                        .tags(List.of("investimentos", "cdb", "resgate", "liquidacao"))
+                        .tags(List.of("investimentos", "cdb", "resgate", "liquidacao", "conta-garantia"))
                         .examples(List.of("Cliente nao encontra o dinheiro que estava em investimentos"))
                         .build()))
                 .build();

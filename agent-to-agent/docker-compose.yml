@@ -57,6 +57,7 @@ services:
       A2A_PUBLIC_URL: http://investimentos-agent:8081
       CDB_MCP_URL: http://cdb-mcp:8083/mcp
       TRACKING_MONEY_MCP_URL: http://tracking-money-mcp:8082/mcp
+      CRED_MCP_URL: http://cred-mcp:8084/mcp
       DB_URL: jdbc:postgresql://postgres:5432/agents?currentSchema=investimentos
     depends_on:
       postgres:
@@ -64,6 +65,8 @@ services:
       cdb-mcp:
         condition: service_healthy
       tracking-money-mcp:
+        condition: service_healthy
+      cred-mcp:
         condition: service_healthy
     healthcheck:
       <<: *healthcheck

@@ -30,8 +30,8 @@ import poc.a2a.investimentos.especialista.ToolProviderComLog;
  * singleton.
  *
  * <p>Os MCP servers sao OUTROS sistemas e ficam de fora, aqui na base porque o contexto nem sobe sem isso:
- * os DefaultMcpClient conectam no construtor, entao os dois beans viram mocks (por nome) e o ToolProvider
- * {@code mcpToolProvider} e trocado pelo {@link McpToolProviderFake}, com os 4 nomes de tool reais,
+ * os DefaultMcpClient conectam no construtor, entao os tres beans viram mocks (por nome) e o ToolProvider
+ * {@code mcpToolProvider} e trocado pelo {@link McpToolProviderFake}, com os 5 nomes de tool reais,
  * mantendo o decorator {@link ToolProviderComLog} que o EspecialistaConfig aplica.
  */
 @Tag("integration")
@@ -50,6 +50,9 @@ public abstract class BaseIntegrationTest {
 
     @MockitoBean(name = "trackingMoneyMcpClient")
     private McpClient trackingMoneyMcpClient;
+
+    @MockitoBean(name = "credMcpClient")
+    private McpClient credMcpClient;
 
     @TestBean(name = "mcpToolProvider", methodName = "mcpToolProviderFake")
     private ToolProvider mcpToolProvider;
