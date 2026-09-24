@@ -7,6 +7,20 @@ export type SituacaoGarantia = {
   proximoPasso: string;
 };
 
+/** Solicitação de empréstimo/cartão consultada pela Ana direto no cred-mcp (MCP, sem especialista). */
+export type SolicitacaoCredito = {
+  solicitacaoId: string;
+  tipo: "EMPRESTIMO_PESSOAL" | "CARTAO_CREDITO";
+  dataSolicitacao: string;
+  status: "APROVADA" | "RECUSADA" | "EM_ANALISE";
+  valorSolicitado: number;
+  /** Código interno da política de crédito: só para debug, a Ana nunca o repassa ao cliente. */
+  motivoCodigo: string | null;
+  motivoCliente: string | null;
+  proximoPasso: string;
+  reavaliacaoApos: string | null;
+};
+
 /** Retorno do especialista no schema padrão (guideline §9), exposto pela Ana com ?debug=true. */
 export type RespostaEspecialista = {
   facts: string[];
@@ -27,6 +41,8 @@ export type ChatResposta = {
   sessionId: string;
   reply: string;
   debug: RespostaEspecialista | null;
+  /** null: a Ana não consultou crédito neste turno; []: consultou e não achou. */
+  credito?: SolicitacaoCredito[] | null;
 };
 
 export type ErroResposta = {

@@ -5,8 +5,9 @@ Design: `docs/superpowers/specs/2026-09-22-a2a-poc-design.md`.
 
 ```
 cliente ─POST /chat─▶ ana-agent:8080 ─A2A JSON-RPC─▶ investimentos-agent:8081 ─MCP─▶ cdb-mcp:8083
-                                                                               └─MCP─▶ tracking-money-mcp:8082
-                                                                               └─MCP─▶ cred-mcp:8084
+                          │                                                    └─MCP─▶ tracking-money-mcp:8082
+                          │                                                    └─MCP─▶ cred-mcp:8084
+                          └─MCP (McpClient direto, solicitações de crédito)─────────────▶ cred-mcp:8084
 ```
 
 ```mermaid
@@ -18,6 +19,7 @@ graph LR
       CRED[cred-mcp :8084]
   
       Ana -->|A2A JSON-RPC| Invest
+      Ana -->|MCP direto: solicitações de crédito| CRED
       Invest -->|MCP| CDB
       Invest -->|MCP| TM
       Invest -->|MCP| CRED
@@ -45,7 +47,8 @@ make up                              # build + compose; espera todos healthy
 
 Abra **http://localhost:3000**, clique num dos **CPFs de teste** (ex.: `888.008.008-31`, resgate retido parcialmente) e
 escreva "meu dinheiro sumiu" → "estava em investimentos". Depois clique em **Nova conversa** e diga "oi, voltei": a
-Ana lembra do atendimento anterior. Para conferir tudo de uma vez: `make smoke`. Para parar: `make down`.
+Ana lembra do atendimento anterior. Para a jornada de crédito, use 999.009.009-28 e pergunte "minha solicitação de
+empréstimo foi recusada, por quê?". Para conferir tudo de uma vez: `make smoke`. Para parar: `make down`.
 
 > Prefere OpenAI ou um gateway em vez do Ollama? `cp .env.example .env` e preencha `LLM_BASE_URL` / `LLM_API_KEY` /
 > `LLM_MODEL`. Modelos pequenos (7b) às vezes erram o tool calling; se a Ana não delegar, tente `qwen3:8b` ou maior.
@@ -109,6 +112,19 @@ dentro do container) e `testcontainers/ryuk:0.12.0` (se ainda não estiver local
 `tc-ollama-qwen2.5-3b` (`OllamaContainer.commitToImage`) e as execuções seguintes sobem direto dela, sem baixar o
 modelo de novo. Para refazer o cache: `docker rmi tc-ollama-qwen2.5-3b`. Inferência em CPU é lenta (minutos por
 teste); por isso o timeout do `ChatModel` é configurável (`llm.timeout`, default 60s; 300s nos ITs).
+
+## Dois jeitos de consumir MCP (para comparar)
+
+| | Ana → cred-mcp (`consultar_solicitacoes_credito`) | investimentos-agent → cdb/tracking/cred |
+|---|---|---|
+| Classe | `McpClient` + `@Tool` Java (`ConsultaCreditoTool` → `CredMcpSolicitacoesCredito`) | `McpToolProvider` (`EspecialistaConfig.provedorMcp`) |
+| Tool vista pelo LLM | `consultar_solicitacoes_credito()` sem parâmetros | as tools do servidor, com `customerId` |
+| Quem preenche `customerId` | Java, de `InvocationParameters` (CPF → cadastro) | o LLM, copiando do pedido A2A |
+| Retorno ao LLM | texto montado em Java, **sem** `motivoCodigo` | JSON cru do MCP |
+| Falha | `INDISPONIVEL` determinístico + histórico + debug | erro da tool volta ao LLM (vira `risks`) |
+| Tool nova no servidor | exige um método Java | aparece sozinha (aqui filtrada por `filterToolNames`) |
+
+Os dois são tool calling; muda quem implementa a tool que o LLM enxerga. Spec: `docs/superpowers/specs/2026-09-23-ana-credito-solicitacoes-design.md`.
 
 ## Fluxo ponta a ponta
 

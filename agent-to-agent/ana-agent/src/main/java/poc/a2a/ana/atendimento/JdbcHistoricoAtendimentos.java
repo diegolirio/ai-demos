@@ -31,7 +31,8 @@ public class JdbcHistoricoAtendimentos implements HistoricoAtendimentos {
               garantia_valor_resgatado NUMERIC(15,2),
               garantia_valor_retido    NUMERIC(15,2),
               garantia_valor_liberado  NUMERIC(15,2),
-              garantia_proximo_passo   TEXT
+              garantia_proximo_passo   TEXT,
+              origem                   TEXT         NOT NULL DEFAULT 'INVESTIMENTOS'
             )""";
 
     private static final String CRIAR_INDICE =
@@ -44,11 +45,19 @@ public class JdbcHistoricoAtendimentos implements HistoricoAtendimentos {
 
     private static final String RECENTES = """
             SELECT criado_em, resumo, confidence, garantia_status, garantia_valor_resgatado,
-                   garantia_valor_retido, garantia_valor_liberado, garantia_proximo_passo
+                   garantia_valor_retido, garantia_valor_liberado, garantia_proximo_passo, origem
               FROM atendimento
              WHERE customer_id = ? AND session_id <> ?
              ORDER BY criado_em DESC, id DESC
              LIMIT ?""";
+
+    /** Bancos criados antes da coluna origem (o CREATE TABLE IF NOT EXISTS nao altera tabela existente). */
+    private static final String ADICIONAR_ORIGEM =
+            "ALTER TABLE atendimento ADD COLUMN IF NOT EXISTS origem TEXT NOT NULL DEFAULT 'INVESTIMENTOS'";
+
+    private static final String INSERIR_CREDITO = """
+            INSERT INTO atendimento (customer_id, session_id, resumo, confidence, origem)
+            VALUES (?, ?, ?, 1.00, 'CREDITO')""";
 
     private final DataSource dataSource;
 
@@ -58,6 +67,7 @@ public class JdbcHistoricoAtendimentos implements HistoricoAtendimentos {
              Statement statement = connection.createStatement()) {
             statement.execute(CRIAR_TABELA);
             statement.execute(CRIAR_INDICE);
+            statement.execute(ADICIONAR_ORIGEM);
         } catch (SQLException e) {
             throw new IllegalStateException("Nao foi possivel criar a tabela atendimento", e);
         }
@@ -84,6 +94,19 @@ public class JdbcHistoricoAtendimentos implements HistoricoAtendimentos {
     }
 
     @Override
+    public void registrarCredito(String customerId, String sessionId, String resumo) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(INSERIR_CREDITO)) {
+            statement.setString(1, customerId);
+            statement.setString(2, sessionId);
+            statement.setString(3, resumo);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("Falha ao registrar atendimento de credito", e);
+        }
+    }
+
+    @Override
     public List<Atendimento> recentesDeOutrasSessoes(String customerId, String sessionIdAtual, int limite) {
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(RECENTES)) {
@@ -98,7 +121,8 @@ public class JdbcHistoricoAtendimentos implements HistoricoAtendimentos {
                             rs.getBigDecimal("garantia_valor_resgatado"), rs.getBigDecimal("garantia_valor_retido"),
                             rs.getBigDecimal("garantia_valor_liberado"), rs.getString("garantia_proximo_passo"));
                     atendimentos.add(new Atendimento(rs.getObject("criado_em", OffsetDateTime.class),
-                            rs.getString("resumo"), rs.getBigDecimal("confidence").doubleValue(), g));
+                            rs.getString("resumo"), rs.getBigDecimal("confidence").doubleValue(), g,
+                            Origem.valueOf(rs.getString("origem"))));
                 }
             }
             return atendimentos;

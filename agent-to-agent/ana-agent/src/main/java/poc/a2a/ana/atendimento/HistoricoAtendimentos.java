@@ -9,6 +9,9 @@ public interface HistoricoAtendimentos {
 
     void registrar(String customerId, String sessionId, RespostaInvestimentos resposta);
 
+    /** Consulta de solicitacoes de credito (origem CREDITO); resumo montado em Java, sem codigos internos. */
+    void registrarCredito(String customerId, String sessionId, String resumo);
+
     /** Mais recentes primeiro, excluindo a sessao atual. */
     List<Atendimento> recentesDeOutrasSessoes(String customerId, String sessionIdAtual, int limite);
 }

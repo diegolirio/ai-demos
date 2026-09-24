@@ -29,7 +29,9 @@ public final class FormatadorAtendimentos {
     }
 
     private static String linha(Atendimento a) {
-        String linha = DATA_HORA.format(a.criadoEm().atZoneSameInstant(BRASILIA)) + " — " + resumoDeUmaLinha(a.resumo());
+        String prefixo = a.origem() == Origem.CREDITO ? "[credito] " : "";
+        String linha = DATA_HORA.format(a.criadoEm().atZoneSameInstant(BRASILIA)) + " — " + prefixo
+                + resumoDeUmaLinha(a.resumo());
         var g = a.situacaoGarantia();
         return g == null ? linha : linha + " [garantia: %s, liberado %s, retido %s]".formatted(
                 g.status(), valorOuInterrogacao(g.valorLiberado()), valorOuInterrogacao(g.valorRetido()));

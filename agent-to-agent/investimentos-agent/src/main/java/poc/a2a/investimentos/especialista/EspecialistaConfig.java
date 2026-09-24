@@ -1,6 +1,7 @@
 package poc.a2a.investimentos.especialista;
 
 import java.time.Duration;
+import java.util.List;
 
 import javax.sql.DataSource;
 
@@ -68,14 +69,25 @@ public class EspecialistaConfig {
                 .build();
     }
 
+    /**
+     * Tools da jornada de investimentos. consultar_solicitacoes_credito (cred-mcp) e da Ana, nao do especialista.
+     * Allowlist: uma tool nova de um MCP do especialista tambem precisa ser adicionada aqui, senao fica oculta.
+     */
+    static final List<String> TOOLS_DO_ESPECIALISTA = List.of("listar_posicoes_cdb", "listar_resgates_cdb",
+            "listar_movimentacoes", "consultar_status_transferencia", "consultar_conta_garantia");
+
     /** failIfOneServerFails=false: um MCP fora não derruba o especialista; a falha vira risk na resposta. */
+    static McpToolProvider provedorMcp(McpClient... clients) {
+        return McpToolProvider.builder()
+                .mcpClients(clients)
+                .failIfOneServerFails(false)
+                .filterToolNames(TOOLS_DO_ESPECIALISTA)
+                .build();
+    }
+
     @Bean
     ToolProvider mcpToolProvider(McpClient cdbMcpClient, McpClient trackingMoneyMcpClient, McpClient credMcpClient) {
-        ToolProvider mcpToolProvider = McpToolProvider.builder()
-                .mcpClients(cdbMcpClient, trackingMoneyMcpClient, credMcpClient)
-                .failIfOneServerFails(false)
-                .build();
-        return new ToolProviderComLog(mcpToolProvider);
+        return new ToolProviderComLog(provedorMcp(cdbMcpClient, trackingMoneyMcpClient, credMcpClient));
     }
 
     @Bean

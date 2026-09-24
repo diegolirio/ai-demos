@@ -17,10 +17,14 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import poc.a2a.ana.assistente.AnaAssistant;
 import poc.a2a.ana.assistente.AnaFactory;
+import poc.a2a.ana.assistente.ConsultaCreditoTool;
 import poc.a2a.ana.assistente.DelegacaoInvestimentosTool;
+import poc.a2a.ana.assistente.UltimasConsultasCredito;
 import poc.a2a.ana.assistente.UltimasRespostasInvestimentos;
 import poc.a2a.ana.atendimento.HistoricoAtendimentos;
 import poc.a2a.ana.atendimento.JdbcHistoricoAtendimentos;
+import poc.a2a.ana.credito.CredMcpSolicitacoesCredito;
+import poc.a2a.ana.credito.SolicitacoesCredito;
 import poc.a2a.ana.investimentos.InvestimentosA2aClient;
 import poc.a2a.ana.investimentos.InvestimentosClient;
 
@@ -85,11 +89,23 @@ public class AnaConfig {
         return new JdbcHistoricoAtendimentos(memoriaDataSource);
     }
 
+    /**
+     * Tipo de retorno concreto para o Spring enxergar AutoCloseable. Nao conecta aqui: o McpClient e criado na
+     * primeira consulta (a Ana sobe mesmo com o cred-mcp fora).
+     */
+    @Bean(destroyMethod = "close")
+    CredMcpSolicitacoesCredito solicitacoesCredito(@Value("${cred.mcp-url}") String url,
+                                                   @Value("${cred.timeout}") Duration timeout) {
+        return CredMcpSolicitacoesCredito.conectandoEm(url, timeout);
+    }
+
     @Bean
     AnaAssistant anaAssistant(ChatModel chatModel, ChatMemoryProvider chatMemoryProvider,
                               InvestimentosClient investimentosClient, UltimasRespostasInvestimentos ultimas,
+                              SolicitacoesCredito solicitacoesCredito, UltimasConsultasCredito ultimasCredito,
                               HistoricoAtendimentos historicoAtendimentos) {
         return AnaFactory.criar(chatModel, chatMemoryProvider,
-                new DelegacaoInvestimentosTool(investimentosClient, ultimas, historicoAtendimentos));
+                new DelegacaoInvestimentosTool(investimentosClient, ultimas, historicoAtendimentos),
+                new ConsultaCreditoTool(solicitacoesCredito, ultimasCredito, historicoAtendimentos));
     }
 }

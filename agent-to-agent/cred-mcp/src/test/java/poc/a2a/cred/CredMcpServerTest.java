@@ -49,11 +49,46 @@ class CredMcpServerTest {
     }
 
     @Test
-    void listaAToolComCustomerIdObrigatorio() {
+    void listaAsToolsComCustomerIdObrigatorio() {
         List<ToolSpecification> tools = client.listTools();
 
-        assertThat(tools).extracting(ToolSpecification::name).containsExactly("consultar_conta_garantia");
-        assertThat(tools.getFirst().parameters().required()).containsExactly("customerId");
+        assertThat(tools).extracting(ToolSpecification::name)
+                .containsExactlyInAnyOrder("consultar_conta_garantia", "consultar_solicitacoes_credito");
+        assertThat(tools).allSatisfy(t -> assertThat(t.parameters().required()).containsExactly("customerId"));
+    }
+
+    private String solicitacoes(String customerId) {
+        return client.executeTool(ToolExecutionRequest.builder()
+                .id("1").name("consultar_solicitacoes_credito")
+                .arguments("{\"customerId\":\"" + customerId + "\"}").build()).resultText();
+    }
+
+    @Test
+    void cli009EmprestimoRecusadoPorRenda() {
+        assertThat(solicitacoes("cli-009"))
+                .contains("\"solicitacaoId\":\"sol-009\"").contains("\"status\":\"RECUSADA\"")
+                .contains("\"motivoCodigo\":\"RENDA_INSUFICIENTE\"").contains("\"valorSolicitado\":30000.00")
+                .contains("\"dataSolicitacao\":\"2026-09-20T10:30:00\"");
+    }
+
+    @Test
+    void cli011TemUmaAprovadaEUmaRecusada() {
+        assertThat(solicitacoes("cli-011"))
+                .contains("\"status\":\"APROVADA\"").contains("\"status\":\"RECUSADA\"")
+                .contains("\"reavaliacaoApos\":\"2027-01-15\"");
+    }
+
+    @Test
+    void semSolicitacoesDevolveListaVazia() {
+        assertThat(solicitacoes("cli-001")).isEqualTo("[]");
+    }
+
+    @Test
+    void solicitacoesRejeitaEntradaForaDoSchema() {
+        assertThatThrownBy(() -> client.executeTool(ToolExecutionRequest.builder()
+                .id("1").name("consultar_solicitacoes_credito").arguments("{\"foo\":\"bar\"}").build()))
+                .isInstanceOf(ToolExecutionException.class)
+                .hasMessageContaining("input validation failed");
     }
 
     @Test

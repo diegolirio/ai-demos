@@ -160,13 +160,21 @@
   text-align: left;
 }
 
-.garantia dl {
+.garantia dl,
+.credito dl {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 0.15rem 0.75rem;
   margin: 0;
 }
 
-.garantia dt {
+.garantia dt,
+.credito dt {
   font-weight: 600;
+}
+
+.credito dl + dl {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid currentColor;
 }

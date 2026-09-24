@@ -9,12 +9,12 @@ public final class AnaFactory {
     private AnaFactory() {
     }
 
-    public static AnaAssistant criar(ChatModel chatModel, ChatMemoryProvider memoria,
-                                     DelegacaoInvestimentosTool delegacao) {
+    /** tools: DelegacaoInvestimentosTool (A2A) e ConsultaCreditoTool (MCP direto). */
+    public static AnaAssistant criar(ChatModel chatModel, ChatMemoryProvider memoria, Object... tools) {
         return AiServices.builder(AnaAssistant.class)
                 .chatModel(chatModel)
                 .chatMemoryProvider(memoria)
-                .tools(delegacao)
+                .tools(tools)
                 .build();
     }
 }

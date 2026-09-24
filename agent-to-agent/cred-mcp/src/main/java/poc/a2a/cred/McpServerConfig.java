@@ -1,5 +1,7 @@
 package poc.a2a.cred;
 
+import java.util.stream.Stream;
+
 import io.modelcontextprotocol.json.jackson3.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpSyncServer;
@@ -32,14 +34,16 @@ public class McpServerConfig {
     }
 
     @Bean(destroyMethod = "closeGracefully")
-    McpSyncServer mcpServer(HttpServletStreamableServerTransportProvider transport, ContaGarantiaTools tools,
-                            JsonMapper jsonMapper) {
+    McpSyncServer mcpServer(HttpServletStreamableServerTransportProvider transport, ContaGarantiaTools garantia,
+                            SolicitacoesCreditoTools solicitacoes, JsonMapper jsonMapper) {
         return McpServer.sync(transport)
                 .serverInfo("cred-mcp", "0.0.1")
-                .instructions("Credito: resgates de investimento retidos em conta garantia por gastos no cartao.")
+                .instructions("Credito: resgates retidos em conta garantia por gastos no cartao e "
+                        + "solicitacoes de emprestimo/cartao (status e motivo de recusa).")
                 .jsonMapper(new JacksonMcpJsonMapper(jsonMapper))
                 .capabilities(ServerCapabilities.builder().tools(false).build())
-                .tools(tools.specifications())
+                .tools(Stream.concat(garantia.specifications().stream(), solicitacoes.specifications().stream())
+                        .toList())
                 .build();
     }
 }
