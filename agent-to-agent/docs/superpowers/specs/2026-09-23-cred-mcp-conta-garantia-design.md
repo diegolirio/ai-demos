@@ -62,11 +62,11 @@ CPFs de teste dos cenários antigos: cli-001 `111.001.001-05`, cli-002 `222.002.
 
 ## 3. investimentos-agent
 
-- `EspecialistaConfig`: bean `credMcpClient` (`mcp.cred-url`, env `MCP_CRED_URL`), incluído no `McpToolProvider` (`failIfOneServerFails=false` — cred-mcp fora não derruba o especialista; vira risk).
+- `EspecialistaConfig`: bean `credMcpClient` (`mcp.cred-url`, env `CRED_MCP_URL`, mesmo padrão de `CDB_MCP_URL`), incluído no `McpToolProvider` (`failIfOneServerFails=false` — cred-mcp fora não derruba o especialista; vira risk).
 - Prompt `especialista-investimentos.txt`:
-  - Passo novo: se houver resgate `LIQUIDADO` sem crédito integral `CONCLUIDA` na conta, consultar `consultar_conta_garantia`.
+  - Passo novo: se houver resgate `LIQUIDADO`, consultar sempre `consultar_conta_garantia` (inclusive quando já há crédito na conta — é assim que `LIBERADO_CONTA` e `RETIDO_PARCIAL` aparecem). Lista vazia = resgate não passou pela garantia.
   - Interpretação por status (tabela 2.2): informar valor/data (`LIBERADO_CONTA`); "em análise por gastos no cartão, sem prazo" (`EM_ANALISE`); gasto e vencimento da fatura (`RETIDO_ATE_PAGAMENTO_FATURA`); valores liberado e retido e o motivo (`RETIDO_PARCIAL`).
-  - `sources` pode incluir `cred-mcp`.
+  - `sources` inclui `cred-mcp` somente quando ele retornou retenção.
   - Preencher `situacaoGarantia` somente quando usou o cred-mcp e encontrou retenção; senão `null`.
 - `RespostaEspecialista` (§9) ganha:
 
@@ -95,27 +95,31 @@ record SituacaoGarantia(String status, BigDecimal valorResgatado, BigDecimal val
 
 ### 4.2 Histórico de atendimentos
 
-Tabela (em `init.sql` no schema `ana`; nos ITs criada no schema `public` pelo `BaseIntegrationTest`):
+Tabela criada pelo próprio repositório no startup (`CREATE TABLE IF NOT EXISTS`, como o `autoCreateTable` do `chat_memory`) — vale para compose (`currentSchema=ana`), execução local e ITs (`public`), sem mexer no `init.sql`:
 
 ```sql
 CREATE TABLE IF NOT EXISTS atendimento (
-  id                BIGSERIAL PRIMARY KEY,
-  customer_id       TEXT        NOT NULL,
-  session_id        TEXT        NOT NULL,
-  criado_em         TIMESTAMPTZ NOT NULL DEFAULT now(),
-  resumo            TEXT        NOT NULL,   -- answerDraft
-  confidence        NUMERIC(3,2) NOT NULL,
-  situacao_garantia JSONB                   -- nullable
+  id                       BIGSERIAL PRIMARY KEY,
+  customer_id              TEXT         NOT NULL,
+  session_id               TEXT         NOT NULL,
+  criado_em                TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  resumo                   TEXT         NOT NULL,   -- answerDraft
+  confidence               NUMERIC(3,2) NOT NULL,
+  garantia_status          TEXT,                    -- colunas garantia_* nulas quando situacaoGarantia = null
+  garantia_valor_resgatado NUMERIC(15,2),
+  garantia_valor_retido    NUMERIC(15,2),
+  garantia_valor_liberado  NUMERIC(15,2),
+  garantia_proximo_passo   TEXT
 );
 CREATE INDEX IF NOT EXISTS atendimento_customer_criado ON atendimento (customer_id, criado_em DESC);
 ```
 
-- `AtendimentoRepository` (JDBC puro sobre o `memoriaDataSource`):
+- Interface `HistoricoAtendimentos`, implementada por `JdbcHistoricoAtendimentos` (JDBC puro sobre o `memoriaDataSource`, bean em `AnaConfig`; nos testes com profile `test`, um fake em memória):
   - `registrar(customerId, sessionId, RespostaInvestimentos)`;
   - `recentesDeOutrasSessoes(customerId, sessionIdAtual, limite=3)` → ordem decrescente de `criado_em`.
 - **Escrita:** `DelegacaoInvestimentosTool`, após delegação bem-sucedida. `INDISPONIVEL` não grava. Falha de gravação → log `warn`, resposta segue.
 - **Leitura:** `ChatController`, a cada turno, formata os registros em texto curto e passa para `AnaAssistant.conversar(...)` como `@V("atendimentosAnteriores")` no system prompt. Formato por linha:
-  `22/09 14:03 — <resumo> [garantia: RETIDO_PARCIAL, liberado 6500.00, retido 3500.00]` (colchete omitido quando `situacao_garantia` é nulo). Sem registros: `nenhum`.
+  `22/09 14:03 — <resumo> [garantia: RETIDO_PARCIAL, liberado 6500.00, retido 3500.00]` (colchete omitido quando `situacaoGarantia` é nulo). Sem registros: `nenhum`.
 - `ana-system.txt` ganha:
   - bloco `Atendimentos anteriores deste cliente: {{atendimentosAnteriores}}`;
   - regra: se houver atendimento anterior, no primeiro turno mencioná-lo ("da última vez vimos que…") e perguntar se é o mesmo assunto; se for, delegar de novo para trazer o status atual. Nunca afirmar o status atual só com base no histórico.
@@ -123,18 +127,17 @@ CREATE INDEX IF NOT EXISTS atendimento_customer_criado ON atendimento (customer_
 
 ## 5. chat-web
 
-- Cabeçalho: campo **CPF** com máscara (`000.000.000-00`) + botão **Iniciar atendimento** no lugar do select; lista **CPFs de teste** (clicável, preenche o campo) com a descrição de cada cenário (`cli-001`..`cli-008`).
+- Cabeçalho: campo **CPF** com máscara (`000.000.000-00`) + botão **Iniciar atendimento** no lugar do select; lista **CPFs de teste** (clicável: preenche o campo e inicia o atendimento) com a descrição de cada cenário (`cli-001`..`cli-008`).
 - Iniciar atendimento / trocar CPF / **Nova conversa** → novo `sessionId`, conversa limpa. Mesmo CPF + nova conversa = cenário "voltar depois".
 - Envio desabilitado enquanto não houver CPF iniciado.
 - `tipos.ts`: `ChatRequisicao = {sessionId, cpf, message}`; `RespostaEspecialista.situacaoGarantia?: SituacaoGarantia | null`.
 - `PainelDebug`: bloco **Conta garantia** (status, resgatado, retido, liberado, próximo passo) quando presente.
-- BFF inalterado (400 da Ana já é repassado; a mensagem de CPF aparece como aviso de sistema).
+- A Ana responde erros de validação como `{"error": "<motivo>"}` (400). O BFF, no 400, repassa o `error` da Ana quando vier string não vazia (senão mantém "Requisição inválida."), e o chat mostra como aviso de sistema.
 
 ## 6. Infra e docs
 
-- `docker-compose.yml`: serviço `cred-mcp` (8084) com healthcheck; `investimentos-agent` com `MCP_CRED_URL` e `depends_on: cred-mcp: service_healthy`.
+- `docker-compose.yml`: serviço `cred-mcp` (8084) com healthcheck; `investimentos-agent` com `CRED_MCP_URL` e `depends_on: cred-mcp: service_healthy`.
 - `Makefile`: `build`/`test` incluem `cred-mcp`; `run-mcps` sobe os 3 MCPs.
-- `docker/postgres/init.sql`: tabela `ana.atendimento`.
 - `smoke-test.sh`: jornada por CPF para `cli-001`..`cli-008`; cenário de retorno (sessão 1 e sessão 2 com o mesmo CPF) conferindo via `psql` que `ana.atendimento` tem registro do cliente — sem comparar texto do LLM.
 - README: diagramas (cred-mcp), tabela de cenários com CPFs, objetos novos; `GUIA-TESTES.md`: roteiro "voltar depois com o mesmo CPF".
 
