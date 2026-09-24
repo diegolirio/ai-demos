@@ -14,10 +14,12 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
+import dev.langchain4j.exception.ToolExecutionException;
 import dev.langchain4j.mcp.client.McpClient;
 import dev.langchain4j.service.tool.ToolExecutionResult;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import static org.mockito.Mockito.never;
 
 class CredMcpSolicitacoesCreditoTest {
 
@@ -100,12 +102,34 @@ class CredMcpSolicitacoesCreditoTest {
     }
 
     @Test
-    void erroDaToolViraIndisponivel() {
+    void erroDaToolViraIndisponivelSemDescartarOClient() throws Exception {
         McpClient mcp = mock(McpClient.class);
-        when(mcp.executeTool(any(ToolExecutionRequest.class))).thenReturn(resultado("boom", true));
+        when(mcp.executeTool(any(ToolExecutionRequest.class)))
+                .thenThrow(new ToolExecutionException("boom"))
+                .thenReturn(resultado("[]", false));
+        CredMcpSolicitacoesCredito adaptador = new CredMcpSolicitacoesCredito(() -> mcp);
 
-        assertThatThrownBy(() -> new CredMcpSolicitacoesCredito(() -> mcp).consultar("cli-009"))
+        assertThatThrownBy(() -> adaptador.consultar("cli-009"))
                 .isInstanceOf(CreditoIndisponivelException.class).hasMessageContaining("boom");
+        verify(mcp, never()).close();
+        assertThat(adaptador.consultar("cli-010")).isEmpty();
+        verify(mcp, org.mockito.Mockito.times(2)).executeTool(any(ToolExecutionRequest.class));
+    }
+
+    @Test
+    void timeoutDaToolViraIndisponivelEDescartaOClient() throws Exception {
+        McpClient quebrado = mock(McpClient.class);
+        when(quebrado.executeTool(any(ToolExecutionRequest.class)))
+                .thenReturn(resultado(CredMcpSolicitacoesCredito.TIMEOUT_SENTINELA, false));
+        McpClient novo = mock(McpClient.class);
+        when(novo.executeTool(any(ToolExecutionRequest.class))).thenReturn(resultado("[]", false));
+        var fila = new java.util.ArrayDeque<>(List.of(quebrado, novo));
+        CredMcpSolicitacoesCredito adaptador = new CredMcpSolicitacoesCredito(fila::poll);
+
+        assertThatThrownBy(() -> adaptador.consultar("cli-009"))
+                .isInstanceOf(CreditoIndisponivelException.class).hasMessageContaining("timeout");
+        verify(quebrado).close();
+        assertThat(adaptador.consultar("cli-009")).isEmpty();
     }
 
     @Test

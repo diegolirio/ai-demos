@@ -7,6 +7,7 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
+import dev.langchain4j.exception.ToolExecutionException;
 import dev.langchain4j.mcp.client.DefaultMcpClient;
 import dev.langchain4j.mcp.client.McpClient;
 import dev.langchain4j.mcp.client.transport.http.StreamableHttpMcpTransport;
@@ -26,6 +27,13 @@ public class CredMcpSolicitacoesCredito implements SolicitacoesCredito, AutoClos
 
     static final String TOOL = "consultar_solicitacoes_credito";
 
+    /**
+     * Sentinela para toolExecutionTimeoutErrorMessage: quando o DefaultMcpClient sofre timeout de
+     * execucao da tool, ele NAO lanca excecao, devolve um ToolExecutionResult (isError=false) cujo
+     * resultText e essa mensagem. Comparamos com ela para distinguir timeout de resposta invalida.
+     */
+    static final String TIMEOUT_SENTINELA = "cred-mcp.timeout.consultar_solicitacoes_credito";
+
     private static final Logger log = LoggerFactory.getLogger(CredMcpSolicitacoesCredito.class);
 
     private final Supplier<McpClient> fabrica;
@@ -42,7 +50,9 @@ public class CredMcpSolicitacoesCredito implements SolicitacoesCredito, AutoClos
                 .key("cred-mcp")
                 .clientName("ana-agent")
                 .transport(StreamableHttpMcpTransport.builder().url(url).timeout(timeout).build())
+                .initializationTimeout(timeout)
                 .toolExecutionTimeout(timeout)
+                .toolExecutionTimeoutErrorMessage(TIMEOUT_SENTINELA)
                 .build());
     }
 
@@ -56,10 +66,19 @@ public class CredMcpSolicitacoesCredito implements SolicitacoesCredito, AutoClos
                     .name(TOOL)
                     .arguments(json.writeValueAsString(Map.of("customerId", customerId)))
                     .build());
+        } catch (ToolExecutionException e) {
+            // Erro da tool no servidor: a sessao MCP continua saudavel, entao o client e reaproveitado.
+            throw new CreditoIndisponivelException(TOOL + " devolveu erro: " + e.getMessage(), e);
         } catch (RuntimeException e) {
             descartar(atual);
             throw new CreditoIndisponivelException("falha ao chamar " + TOOL + ": " + e.getMessage(), e);
         }
+        if (TIMEOUT_SENTINELA.equals(resultado.resultText())) {
+            // Timeout pode indicar sessao presa: descarta o client, a proxima reconecta.
+            descartar(atual);
+            throw new CreditoIndisponivelException("timeout ao chamar " + TOOL);
+        }
+        // Defensivo: o DefaultMcpClient nunca devolve isError=true (erro de tool vira ToolExecutionException).
         if (resultado.isError()) {
             throw new CreditoIndisponivelException(TOOL + " devolveu erro: " + resultado.resultText());
         }
