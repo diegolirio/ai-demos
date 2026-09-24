@@ -16,7 +16,7 @@ public class ContaGarantiaTools {
 
     private static final Logger log = LoggerFactory.getLogger(ContaGarantiaTools.class);
 
-    private static final Map<String, Object> CUSTOMER_ID_SCHEMA = Map.of(
+    static final Map<String, Object> CUSTOMER_ID_SCHEMA = Map.of(
             "type", "object",
             "properties", Map.of("customerId", Map.of(
                     "type", "string",
