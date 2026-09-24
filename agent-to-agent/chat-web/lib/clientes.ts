@@ -8,4 +8,8 @@ export const CLIENTES = [
   { cpf: "666.006.006-59", id: "cli-006", descricao: "Garantia: em análise (cartão)" },
   { cpf: "777.007.007-45", id: "cli-007", descricao: "Garantia: retido até pagar a fatura" },
   { cpf: "888.008.008-31", id: "cli-008", descricao: "Garantia: retido parcialmente" },
+  { cpf: "999.009.009-28", id: "cli-009", descricao: "Crédito: empréstimo recusado (renda)" },
+  { cpf: "101.010.010-61", id: "cli-010", descricao: "Crédito: cartão recusado (restrição no CPF)" },
+  { cpf: "121.011.011-30", id: "cli-011", descricao: "Crédito: cartão aprovado, empréstimo recusado" },
+  { cpf: "131.012.012-92", id: "cli-012", descricao: "Crédito: empréstimo em análise" },
 ] as const;

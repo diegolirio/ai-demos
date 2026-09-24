@@ -65,7 +65,7 @@ export function Chat({ sessionIdInicial }: { sessionIdInicial: string }) {
       }
       const dados = (await resposta.json()) as ChatResposta;
       setMensagens((atuais) => [...atuais, { id: novoId(), autor: "ana", texto: dados.reply }]);
-      setTurnos((atuais) => [...atuais, { id: novoId(), mensagem, debug: dados.debug }]);
+      setTurnos((atuais) => [...atuais, { id: novoId(), mensagem, debug: dados.debug, credito: dados.credito ?? null }]);
     } catch {
       setMensagens((atuais) => [...atuais, { id: novoId(), autor: "sistema", texto: MENSAGEM_ANA_INDISPONIVEL }]);
     } finally {

@@ -235,4 +235,58 @@ describe("Chat", () => {
     expect(screen.getByLabelText("CPF")).not.toBeDisabled();
     expect(screen.getByRole("button", { name: "Nova conversa" })).not.toBeDisabled();
   });
+
+  it("mostra as solicitações de crédito consultadas direto no cred-mcp", async () => {
+    fetchMock.mockResolvedValue(
+      Response.json({
+        sessionId: "s",
+        reply: "Seu empréstimo foi recusado porque a parcela compromete sua renda.",
+        debug: null,
+        credito: [
+          {
+            solicitacaoId: "sol-011b",
+            tipo: "EMPRESTIMO_PESSOAL",
+            dataSolicitacao: "2026-09-20T10:30:00",
+            status: "RECUSADA",
+            valorSolicitado: 20000,
+            motivoCodigo: "RELACIONAMENTO_RECENTE",
+            motivoCliente: "Sua conta tem menos de 6 meses de relacionamento com o banco",
+            proximoPasso: "Nova análise após a reavaliação",
+            reavaliacaoApos: "2027-01-15",
+          },
+        ],
+      }),
+    );
+    renderChat();
+    await iniciar("121.011.011-30");
+
+    await enviar("meu empréstimo foi recusado");
+
+    const painel = screen.getByRole("complementary", { name: "Debug do especialista" });
+    const credito = await within(painel).findByRole("region", { name: "Solicitações de crédito" });
+    expect(within(credito).getByText("RECUSADA")).toBeInTheDocument();
+    expect(within(credito).getByText("RELACIONAMENTO_RECENTE")).toBeInTheDocument();
+    expect(within(credito).getByText("Sua conta tem menos de 6 meses de relacionamento com o banco")).toBeInTheDocument();
+    expect(within(credito).getByText("R$ 20.000,00")).toBeInTheDocument();
+    expect(within(credito).getByText("15/01/2027")).toBeInTheDocument();
+    expect(within(painel).queryByText("sem delegação")).not.toBeInTheDocument();
+  });
+
+  it("consulta de crédito sem solicitações mostra lista vazia", async () => {
+    fetchMock.mockResolvedValue(Response.json({ sessionId: "s", reply: "Não encontrei.", debug: null, credito: [] }));
+    renderChat();
+    await iniciar();
+
+    await enviar("tenho pedido de cartão?");
+
+    const credito = await screen.findByRole("region", { name: "Solicitações de crédito" });
+    expect(within(credito).getByText("nenhuma solicitação")).toBeInTheDocument();
+  });
+
+  it("lista os CPFs de teste de crédito", () => {
+    renderChat();
+
+    expect(screen.getByRole("button", { name: /999\.009\.009-28/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /131\.012\.012-92/ })).toBeInTheDocument();
+  });
 });
