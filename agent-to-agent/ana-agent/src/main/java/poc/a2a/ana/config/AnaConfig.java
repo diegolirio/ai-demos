@@ -19,6 +19,8 @@ import poc.a2a.ana.assistente.AnaAssistant;
 import poc.a2a.ana.assistente.AnaFactory;
 import poc.a2a.ana.assistente.DelegacaoInvestimentosTool;
 import poc.a2a.ana.assistente.UltimasRespostasInvestimentos;
+import poc.a2a.ana.atendimento.HistoricoAtendimentos;
+import poc.a2a.ana.atendimento.JdbcHistoricoAtendimentos;
 import poc.a2a.ana.investimentos.InvestimentosA2aClient;
 import poc.a2a.ana.investimentos.InvestimentosClient;
 
@@ -76,6 +78,11 @@ public class AnaConfig {
     InvestimentosA2aClient investimentosClient(@Value("${investimentos.a2a-url}") String url,
                                                 @Value("${investimentos.timeout}") Duration timeout) {
         return new InvestimentosA2aClient(url, timeout);
+    }
+
+    @Bean
+    HistoricoAtendimentos historicoAtendimentos(DataSource memoriaDataSource) {
+        return new JdbcHistoricoAtendimentos(memoriaDataSource);
     }
 
     @Bean

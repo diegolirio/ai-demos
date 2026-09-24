@@ -50,13 +50,15 @@ public abstract class BaseIntegrationTest {
                 .build();
     }
 
-    // chat_memory e criada pelo SQLChatMemoryStore (autoCreateTable) no startup; o guard cobre o caso de ainda nao existir.
+    // chat_memory e atendimento sao criadas no startup (autoCreateTable / JdbcHistoricoAtendimentos); o guard cobre o caso de ainda nao existirem.
     @BeforeEach
     void clearDatabase() throws SQLException {
         try (Connection connection = memoriaDataSource.getConnection();
              Statement statement = connection.createStatement()) {
             statement.execute("DO $$ BEGIN IF to_regclass('chat_memory') IS NOT NULL "
                     + "THEN DELETE FROM chat_memory; END IF; END $$");
+            statement.execute("DO $$ BEGIN IF to_regclass('atendimento') IS NOT NULL "
+                    + "THEN DELETE FROM atendimento; END IF; END $$");
         }
     }
 
@@ -66,6 +68,19 @@ public abstract class BaseIntegrationTest {
              PreparedStatement statement = connection.prepareStatement(
                      "SELECT count(*) FROM chat_memory WHERE memory_id = ?")) {
             statement.setString(1, memoryId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                resultSet.next();
+                return resultSet.getInt(1);
+            }
+        }
+    }
+
+    /** Atendimentos gravados para o cliente. */
+    protected int atendimentoRows(String customerId) throws SQLException {
+        try (Connection connection = memoriaDataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT count(*) FROM atendimento WHERE customer_id = ?")) {
+            statement.setString(1, customerId);
             try (ResultSet resultSet = statement.executeQuery()) {
                 resultSet.next();
                 return resultSet.getInt(1);
