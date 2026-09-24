@@ -38,12 +38,13 @@ public class InvestimentosAgentExecutor implements AgentExecutor {
         log.info("a2a.task.start contextId={} taskId={} customerId={}",
                 context.getContextId(), context.getTaskId(), customerId);
         try {
-            RespostaEspecialista resposta = especialista.investigar(context.getContextId(), pedido);
+            RespostaEspecialista resposta = especialista.investigar(context.getContextId(), pedido).validada();
             List<Part<?>> parts = List.of(new TextPart(resposta.answerDraft()), new DataPart(resposta.comoMapa()));
             emitter.addArtifact(parts, null, "resposta-investimentos", null);
             emitter.complete();
-            log.info("a2a.task.completed contextId={} taskId={} confidence={} sources={} durationMs={}",
+            log.info("a2a.task.completed contextId={} taskId={} confidence={} sources={} situacaoGarantia={} durationMs={}",
                     context.getContextId(), context.getTaskId(), resposta.confidence(), resposta.sources(),
+                    resposta.situacaoGarantia() == null ? "-" : resposta.situacaoGarantia().status(),
                     (System.nanoTime() - inicio) / 1_000_000);
         } catch (RuntimeException e) {
             log.error("a2a.task.failed contextId={} taskId={} durationMs={}",
