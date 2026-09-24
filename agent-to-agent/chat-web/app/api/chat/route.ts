@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   }
 
   if (resposta.status === 400) {
-    return Response.json({ error: MENSAGEM_REQUISICAO_INVALIDA }, { status: 400 });
+    return Response.json({ error: await motivoDoErro(resposta) }, { status: 400 });
   }
   if (!resposta.ok) {
     return Response.json({ error: MENSAGEM_ANA_INDISPONIVEL }, { status: 502 });
@@ -36,5 +36,15 @@ export async function POST(request: Request) {
   } catch (erro) {
     console.error("chat-web: resposta da Ana não é JSON válido", erro);
     return Response.json({ error: MENSAGEM_ANA_INDISPONIVEL }, { status: 502 });
+  }
+}
+
+/** A Ana responde 400 como {"error": "..."} (ex.: CPF inválido); sem motivo legível, usa a mensagem genérica. */
+async function motivoDoErro(resposta: Response): Promise<string> {
+  try {
+    const corpo = (await resposta.json()) as { error?: unknown };
+    return typeof corpo.error === "string" && corpo.error.trim() ? corpo.error : MENSAGEM_REQUISICAO_INVALIDA;
+  } catch {
+    return MENSAGEM_REQUISICAO_INVALIDA;
   }
 }

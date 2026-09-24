@@ -19,6 +19,8 @@ import poc.a2a.ana.assistente.AnaAssistant;
 import poc.a2a.ana.assistente.AnaFactory;
 import poc.a2a.ana.assistente.DelegacaoInvestimentosTool;
 import poc.a2a.ana.assistente.UltimasRespostasInvestimentos;
+import poc.a2a.ana.atendimento.HistoricoAtendimentos;
+import poc.a2a.ana.atendimento.JdbcHistoricoAtendimentos;
 import poc.a2a.ana.investimentos.InvestimentosA2aClient;
 import poc.a2a.ana.investimentos.InvestimentosClient;
 
@@ -79,8 +81,15 @@ public class AnaConfig {
     }
 
     @Bean
+    HistoricoAtendimentos historicoAtendimentos(DataSource memoriaDataSource) {
+        return new JdbcHistoricoAtendimentos(memoriaDataSource);
+    }
+
+    @Bean
     AnaAssistant anaAssistant(ChatModel chatModel, ChatMemoryProvider chatMemoryProvider,
-                              InvestimentosClient investimentosClient, UltimasRespostasInvestimentos ultimas) {
-        return AnaFactory.criar(chatModel, chatMemoryProvider, new DelegacaoInvestimentosTool(investimentosClient, ultimas));
+                              InvestimentosClient investimentosClient, UltimasRespostasInvestimentos ultimas,
+                              HistoricoAtendimentos historicoAtendimentos) {
+        return AnaFactory.criar(chatModel, chatMemoryProvider,
+                new DelegacaoInvestimentosTool(investimentosClient, ultimas, historicoAtendimentos));
     }
 }

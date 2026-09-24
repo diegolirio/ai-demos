@@ -2,6 +2,7 @@ package poc.a2a.investimentos.a2a;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -16,6 +17,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.client.RestClient;
 import poc.a2a.investimentos.especialista.EspecialistaInvestimentos;
 import poc.a2a.investimentos.especialista.RespostaEspecialista;
+import poc.a2a.investimentos.especialista.SituacaoGarantia;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -42,6 +44,18 @@ class A2aServerTest {
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     }
+                }
+                if (pedido.contains("garantia-ok")) {
+                    return new RespostaEspecialista(List.of("Resgate res-008 RETIDO_PARCIAL"),
+                            "Parte do resgate foi liberada e parte segue retida.", 0.9, List.of(),
+                            List.of("cdb-mcp", "cred-mcp"), new SituacaoGarantia("RETIDO_PARCIAL",
+                            new BigDecimal("10000.00"), new BigDecimal("3500.00"), new BigDecimal("6500.00"),
+                            "Pagar a fatura do cartao"));
+                }
+                if (pedido.contains("garantia-errada")) {
+                    return new RespostaEspecialista(List.of("x"), "y", 0.9, List.of(), List.of("cred-mcp"),
+                            new SituacaoGarantia("RETIDO_PARCIAL", new BigDecimal("10000.00"),
+                                    new BigDecimal("3500.00"), new BigDecimal("9999.00"), "z"));
                 }
                 return new RespostaEspecialista(List.of("Resgate res-001 de R$ 5000.00 EM_LIQUIDACAO"),
                         "Seu resgate esta em liquidacao e cai na conta em alguns minutos.", 0.9,
@@ -116,5 +130,26 @@ class A2aServerTest {
         JsonNode task = sendMessage("ctx-3", "isso explode").path("result").path("task");
 
         assertThat(task.path("status").path("state").asString()).isEqualTo("TASK_STATE_FAILED");
+    }
+
+    @Test
+    void dataPartLevaASituacaoGarantia() {
+        JsonNode dados = sendMessage("ctx-4", "pedido garantia-ok").path("result").path("task")
+                .path("artifacts").get(0).path("parts").get(1).path("data");
+
+        JsonNode situacao = dados.path("situacaoGarantia");
+        assertThat(situacao.path("status").asString()).isEqualTo("RETIDO_PARCIAL");
+        assertThat(situacao.path("valorRetido").decimalValue()).isEqualByComparingTo("3500.00");
+        assertThat(situacao.path("valorLiberado").decimalValue()).isEqualByComparingTo("6500.00");
+    }
+
+    @Test
+    void situacaoInconsistenteEDescartadaSemFalharATask() {
+        JsonNode task = sendMessage("ctx-5", "pedido garantia-errada").path("result").path("task");
+
+        assertThat(task.path("status").path("state").asString()).isEqualTo("TASK_STATE_COMPLETED");
+        JsonNode dados = task.path("artifacts").get(0).path("parts").get(1).path("data");
+        assertThat(dados.has("situacaoGarantia")).isFalse();
+        assertThat(dados.path("risks").get(0).asString()).isEqualTo(RespostaEspecialista.RISCO_GARANTIA_DESCARTADA);
     }
 }

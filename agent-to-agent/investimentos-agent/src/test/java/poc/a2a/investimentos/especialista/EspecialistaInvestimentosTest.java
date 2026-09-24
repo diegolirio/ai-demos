@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static poc.a2a.investimentos.especialista.ScriptedChatModel.chamarTool;
 import static poc.a2a.investimentos.especialista.ScriptedChatModel.responder;
 
+import java.math.BigDecimal;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -75,5 +77,56 @@ class EspecialistaInvestimentosTest {
 
         assertThat(llm.requisicoes().get(1).messages().toString())
                 .contains("primeiro pedido").contains("segundo pedido");
+    }
+
+    static ToolSpecification toolPorCliente(String nome) {
+        return ToolSpecification.builder().name(nome).description(nome)
+                .parameters(JsonObjectSchema.builder().addStringProperty("customerId").required("customerId").build())
+                .build();
+    }
+
+    @Test
+    void cli008ConsultaContaGarantiaEPreencheSituacao() {
+        Map<ToolSpecification, dev.langchain4j.service.tool.ToolExecutor> tools = new LinkedHashMap<>();
+        tools.put(toolPorCliente("listar_resgates_cdb"), (r, m) ->
+                "[{\"resgateId\":\"res-008\",\"valor\":10000.00,\"status\":\"LIQUIDADO\"}]");
+        tools.put(toolPorCliente("consultar_conta_garantia"), (r, m) ->
+                "[{\"resgateId\":\"res-008\",\"status\":\"RETIDO_PARCIAL\",\"valorResgatado\":10000.00,"
+                        + "\"valorRetido\":3500.00,\"valorLiberado\":6500.00,\"gastoCartao\":3500.00,"
+                        + "\"vencimentoFatura\":\"2026-10-05\"}]");
+        ToolProvider provider = request -> new ToolProviderResult(tools);
+        ScriptedChatModel llm = new ScriptedChatModel(
+                chamarTool("listar_resgates_cdb", "{\"customerId\":\"cli-008\"}"),
+                chamarTool("consultar_conta_garantia", "{\"customerId\":\"cli-008\"}"),
+                responder(resultados -> {
+                    assertThat(resultados).hasSize(2);
+                    return """
+                            {"facts":["Resgate res-008 RETIDO_PARCIAL na conta garantia"],
+                             "answerDraft":"R$ 6.500,00 foram liberados e R$ 3.500,00 seguem retidos ate o pagamento da fatura.",
+                             "confidence":0.9,"risks":[],"sources":["cdb-mcp","cred-mcp"],
+                             "situacaoGarantia":{"status":"RETIDO_PARCIAL","valorResgatado":10000.00,
+                               "valorRetido":3500.00,"valorLiberado":6500.00,
+                               "proximoPasso":"Pagar a fatura do cartao com vencimento em 05/10"}}
+                            """;
+                }));
+
+        RespostaEspecialista resposta = EspecialistaFactory.criar(llm, provider, memoria)
+                .investigar("ctx-8", "customerId: cli-008\nPedido: nao acho meu dinheiro");
+
+        assertThat(resposta.situacaoGarantia()).isNotNull();
+        assertThat(resposta.situacaoGarantia().status()).isEqualTo("RETIDO_PARCIAL");
+        assertThat(resposta.situacaoGarantia().valorRetido()).isEqualByComparingTo(new BigDecimal("3500.00"));
+        assertThat(resposta.situacaoGarantia().consistente()).isTrue();
+        assertThat(resposta.sources()).contains("cred-mcp");
+    }
+
+    @Test
+    void promptMandaConsultarAContaGarantiaQuandoOResgateLiquidou() {
+        ScriptedChatModel llm = new ScriptedChatModel(responder(r -> RESPOSTA_JSON));
+
+        EspecialistaFactory.criar(llm, toolsFake, memoria).investigar("ctx-prompt", "qualquer");
+
+        assertThat(llm.requisicoes().getFirst().messages().getFirst().toString())
+                .contains("consultar_conta_garantia").contains("RETIDO_PARCIAL").contains("situacaoGarantia");
     }
 }

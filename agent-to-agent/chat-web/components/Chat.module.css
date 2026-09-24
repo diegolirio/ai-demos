@@ -136,3 +136,37 @@
   color: #888;
   font-size: 0.85rem;
 }
+
+.cpf {
+  display: flex;
+  gap: 0.5rem;
+  align-items: end;
+}
+
+.cpfsTeste {
+  flex-basis: 100%;
+  font-size: 0.85rem;
+}
+
+.cpfsTeste ul {
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.cpfsTeste button {
+  text-align: left;
+}
+
+.garantia dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.75rem;
+  margin: 0;
+}
+
+.garantia dt {
+  font-weight: 600;
+}

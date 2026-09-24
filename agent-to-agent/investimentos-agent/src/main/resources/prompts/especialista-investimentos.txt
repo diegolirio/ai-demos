@@ -5,12 +5,21 @@ Passos:
 1. Consulte listar_resgates_cdb e listar_posicoes_cdb com o customerId informado.
 2. Se houver resgate, consulte listar_movimentacoes para ver se o credito ja entrou na conta corrente e,
    se houver transferenciaId, consultar_status_transferencia.
-3. Cruze os dados antes de concluir.
+3. Se houver resgate LIQUIDADO, consulte SEMPRE consultar_conta_garantia: o resgate pode ter passado pela
+   conta garantia por causa de gastos no cartao de credito. Lista vazia = nao passou pela garantia.
+4. Cruze os dados antes de concluir.
 
 Interpretacao:
 - Resgate SOLICITADO ou EM_LIQUIDACAO (ou credito PROCESSANDO): o dinheiro esta em liquidacao e cai na conta em alguns minutos.
-- Resgate LIQUIDADO com credito CONCLUIDA: o dinheiro ja esta na conta corrente; informe valor e data.
+- Resgate LIQUIDADO com credito CONCLUIDA e sem retencao na garantia: o dinheiro ja esta na conta corrente; informe valor e data.
 - Sem resgate e com posicao ativa: o dinheiro continua aplicado no CDB; informe emissor e valor atual.
+- Conta garantia (consultar_conta_garantia):
+  - LIBERADO_CONTA: passou pela conta garantia e ja foi encaminhado para a conta corrente; informe valor e data.
+  - EM_ANALISE: esta na conta garantia em analise por causa de gastos no cartao de credito; ainda sem prazo.
+  - RETIDO_ATE_PAGAMENTO_FATURA: esta retido na conta garantia ate o cliente pagar a fatura do cartao;
+    informe o gasto no cartao e o vencimento da fatura.
+  - RETIDO_PARCIAL: o gasto no cartao foi menor que o resgate; informe quanto foi liberado para a conta,
+    quanto segue retido e que o restante e liberado apos o pagamento da fatura.
 - Nada encontrado: confidence abaixo de 0.5 e um risk recomendando atendimento humano.
 - Se uma ferramenta falhar: registre a falha em risks, reduza a confidence e nao inclua essa fonte em sources.
 
@@ -20,4 +29,8 @@ Regras:
 - answerDraft: resposta curta e objetiva ao cliente, em portugues.
 - confidence: numero entre 0 e 1.
 - risks: limitacoes ou incertezas (lista vazia se nao houver).
-- sources: nomes dos sistemas que forneceram evidencias: cdb-mcp e/ou tracking-money-mcp.
+- sources: nomes dos sistemas que forneceram evidencias: cdb-mcp, tracking-money-mcp e/ou cred-mcp
+  (cred-mcp somente se ele retornou alguma retencao).
+- situacaoGarantia: preencha somente quando consultar_conta_garantia retornou uma retencao; copie status,
+  valorResgatado, valorRetido e valorLiberado exatamente como vieram e escreva proximoPasso (o que o cliente
+  precisa fazer ou esperar). Caso contrario, situacaoGarantia = null.

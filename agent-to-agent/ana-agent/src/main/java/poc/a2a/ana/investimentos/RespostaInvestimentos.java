@@ -5,7 +5,12 @@ import java.util.Map;
 
 /** Schema padrão de resposta de especialista (guideline §9), como recebido no DataPart A2A. */
 public record RespostaInvestimentos(List<String> facts, String answerDraft, double confidence,
-                                    List<String> risks, List<String> sources) {
+                                    List<String> risks, List<String> sources, SituacaoGarantia situacaoGarantia) {
+
+    public RespostaInvestimentos(List<String> facts, String answerDraft, double confidence,
+                                 List<String> risks, List<String> sources) {
+        this(facts, answerDraft, confidence, risks, sources, null);
+    }
 
     public static RespostaInvestimentos deMapa(Map<?, ?> mapa) {
         return new RespostaInvestimentos(
@@ -13,7 +18,8 @@ public record RespostaInvestimentos(List<String> facts, String answerDraft, doub
                 mapa.get("answerDraft") == null ? "" : mapa.get("answerDraft").toString(),
                 mapa.get("confidence") instanceof Number n ? n.doubleValue() : 0.0,
                 lista(mapa.get("risks")),
-                lista(mapa.get("sources")));
+                lista(mapa.get("sources")),
+                SituacaoGarantia.deMapa(mapa.get("situacaoGarantia")));
     }
 
     private static List<String> lista(Object valor) {
@@ -22,10 +28,11 @@ public record RespostaInvestimentos(List<String> facts, String answerDraft, doub
 
     /** Texto devolvido ao LLM da Ana como resultado da tool. */
     public String paraTextoLlm() {
-        return "answerDraft: " + answerDraft
+        String texto = "answerDraft: " + answerDraft
                 + "\nfacts: " + facts
                 + "\nconfidence: " + confidence
                 + "\nrisks: " + risks
                 + "\nsources: " + sources;
+        return situacaoGarantia == null ? texto : texto + "\nsituacaoGarantia: " + situacaoGarantia;
     }
 }

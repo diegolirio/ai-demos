@@ -27,6 +27,7 @@ import tools.jackson.databind.json.JsonMapper;
 class ChatControllerIT extends BaseIntegrationTest {
 
     static final String CUSTOMER_ID = "cli-001";
+    static final String CPF = "111.001.001-05";
 
     // Mesmo conteudo que o investimentos-agent devolve para cli-001 (cdb-mcp + tracking-money-mcp).
     static final RespostaInvestimentos RESPOSTA_ESPECIALISTA = new RespostaInvestimentos(
@@ -42,7 +43,7 @@ class ChatControllerIT extends BaseIntegrationTest {
     private final JsonMapper json = JsonMapper.builder().build();
 
     private JsonNode chat(String sessionId, String message) {
-        String body = json.writeValueAsString(new ChatRequisicao(sessionId, CUSTOMER_ID, message));
+        String body = json.writeValueAsString(new ChatRequisicao(sessionId, CPF, message));
         String resposta = restTestClient.post().uri("/chat")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(body)
@@ -71,6 +72,8 @@ class ChatControllerIT extends BaseIntegrationTest {
         // customerId vem do request (InvocationParameters), nunca do LLM; contextId A2A = sessionId.
         // atLeastOnce: o prompt manda triar no turno 1, mas um modelo pequeno pode delegar ja nele.
         verify(investimentosClient, atLeastOnce()).delegar(eq(sessionId), eq(CUSTOMER_ID), anyString());
+        // cada delegacao bem-sucedida vira um atendimento do cliente (lido nas proximas sessoes)
+        assertThat(atendimentoRows(CUSTOMER_ID)).isGreaterThanOrEqualTo(1);
     }
 
     @Test
@@ -78,6 +81,17 @@ class ChatControllerIT extends BaseIntegrationTest {
         restTestClient.post().uri("/chat")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body("{\"sessionId\":\"it-sess-400\",\"message\":\"oi\"}")
+                .exchange()
+                .expectStatus().isBadRequest();
+
+        verifyNoInteractions(investimentosClient);
+    }
+
+    @Test
+    void cpfForaDoCadastroSemChamarLlmNemEspecialista() {
+        restTestClient.post().uri("/chat")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("{\"sessionId\":\"it-sess-cpf\",\"cpf\":\"123.456.789-09\",\"message\":\"oi\"}")
                 .exchange()
                 .expectStatus().isBadRequest();
 

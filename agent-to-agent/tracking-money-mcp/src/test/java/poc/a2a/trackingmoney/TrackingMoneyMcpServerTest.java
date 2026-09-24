@@ -76,6 +76,28 @@ class TrackingMoneyMcpServerTest {
     }
 
     @Test
+    void cli005RecebeuOResgateIntegral() {
+        assertThat(chamar("listar_movimentacoes", "{\"customerId\":\"cli-005\"}"))
+                .contains("\"status\":\"CONCLUIDA\"").contains("10000.00").contains("\"transferenciaId\":\"trf-005\"");
+        assertThat(chamar("consultar_status_transferencia", "{\"transferenciaId\":\"trf-005\"}"))
+                .contains("\"status\":\"CONCLUIDA\"");
+    }
+
+    @Test
+    void cli008RecebeuSoAParteLiberada() {
+        assertThat(chamar("listar_movimentacoes", "{\"customerId\":\"cli-008\"}"))
+                .contains("\"status\":\"CONCLUIDA\"").contains("6500.00").contains("\"transferenciaId\":\"trf-008\"");
+        assertThat(chamar("consultar_status_transferencia", "{\"transferenciaId\":\"trf-008\"}"))
+                .contains("\"status\":\"CONCLUIDA\"");
+    }
+
+    @Test
+    void cli006ECli007NaoRecebemCredito() {
+        assertThat(chamar("listar_movimentacoes", "{\"customerId\":\"cli-006\"}")).isEqualTo("[]");
+        assertThat(chamar("listar_movimentacoes", "{\"customerId\":\"cli-007\"}")).isEqualTo("[]");
+    }
+
+    @Test
     void transferenciaInexistenteEErro() {
         assertThatThrownBy(() -> chamar("consultar_status_transferencia", "{\"transferenciaId\":\"trf-999\"}"))
                 .isInstanceOf(ToolExecutionException.class)

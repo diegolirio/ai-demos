@@ -11,7 +11,7 @@ import dev.langchain4j.service.tool.ToolProviderResult;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Dublê das tools MCP (cdb-mcp e tracking-money-mcp sao OUTROS sistemas): os mesmos 4 nomes, descricoes e
+ * Dublê das tools MCP (cdb-mcp e tracking-money-mcp sao OUTROS sistemas): os mesmos 5 nomes, descricoes e
  * parametros das tools reais, com respostas canned copiadas dos repositorios mock dos MCP servers
  * (CdbRepository / TrackingMoneyRepository) para cli-001, no mesmo JSON que o servidor serializa.
  * Cliente desconhecido -> array vazio, como os servidores reais.
@@ -64,6 +64,13 @@ final class McpToolProviderFake {
                         "transferenciaId", "Identificador da transferencia, ex.: trf-001"),
                         executor("transferenciaId", id -> "trf-001".equals(id)
                                 ? TRANSFERENCIA_TRF_001 : "Transferencia nao encontrada: " + id))
+                .add(porCliente("consultar_conta_garantia",
+                        "Lista as retencoes em conta garantia de resgates de investimento do cliente, "
+                                + "motivadas por gastos no cartao de credito: resgateId, status (LIBERADO_CONTA | "
+                                + "EM_ANALISE | RETIDO_ATE_PAGAMENTO_FATURA | RETIDO_PARCIAL), valorResgatado, "
+                                + "valorRetido, valorLiberado, gastoCartao, vencimentoFatura e detalhe. "
+                                + "Retorna um array JSON (vazio se o resgate nao passou pela conta garantia)."),
+                        executor("customerId", id -> "[]"))
                 .build();
         return request -> resultado;
     }

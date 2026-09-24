@@ -29,13 +29,23 @@ public class TrackingMoneyRepository {
                     StatusMovimentacao.PROCESSANDO, "trf-001")),
             "cli-002", List.of(new Movimentacao("mov-002", TipoMovimentacao.CREDITO, new BigDecimal("3000.00"),
                     "Resgate CDB res-002", LocalDateTime.of(2026, 9, 21, 9, 45),
-                    StatusMovimentacao.CONCLUIDA, "trf-002")));
+                    StatusMovimentacao.CONCLUIDA, "trf-002")),
+            "cli-005", List.of(new Movimentacao("mov-005", TipoMovimentacao.CREDITO, new BigDecimal("10000.00"),
+                    "Resgate CDB res-005 liberado da conta garantia", LocalDateTime.of(2026, 9, 22, 11, 0),
+                    StatusMovimentacao.CONCLUIDA, "trf-005")),
+            "cli-008", List.of(new Movimentacao("mov-008", TipoMovimentacao.CREDITO, new BigDecimal("6500.00"),
+                    "Resgate CDB res-008 liberado parcialmente da conta garantia", LocalDateTime.of(2026, 9, 22, 11, 0),
+                    StatusMovimentacao.CONCLUIDA, "trf-008")));
 
     private final Map<String, StatusTransferencia> transferencias = Map.of(
             "trf-001", new StatusTransferencia("trf-001", "EM_PROCESSAMENTO", "ate 30 minutos",
                     "Liquidacao do resgate em andamento; o credito sera efetuado na conta corrente"),
             "trf-002", new StatusTransferencia("trf-002", "CONCLUIDA", "ja efetuado",
-                    "Credito efetuado na conta corrente"));
+                    "Credito efetuado na conta corrente"),
+            "trf-005", new StatusTransferencia("trf-005", "CONCLUIDA", "ja efetuado",
+                    "Credito efetuado na conta corrente apos liberacao da conta garantia"),
+            "trf-008", new StatusTransferencia("trf-008", "CONCLUIDA", "ja efetuado",
+                    "Credito parcial efetuado; parte do resgate segue retida na conta garantia"));
 
     public List<Movimentacao> movimentacoes(String customerId) {
         return movimentacoes.getOrDefault(customerId, List.of());

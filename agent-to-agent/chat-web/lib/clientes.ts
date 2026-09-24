@@ -1,7 +1,11 @@
-/** Cenários mock da POC (mesmos customerIds dos MCP servers). */
+/** CPFs de teste (fictícios) dos cenários mock; a Ana resolve CPF → customerId. */
 export const CLIENTES = [
-  { id: "cli-001", descricao: "Resgate de CDB em liquidação" },
-  { id: "cli-002", descricao: "Resgate liquidado, crédito na conta" },
-  { id: "cli-003", descricao: "CDB ativo, sem resgate" },
-  { id: "cli-004", descricao: "Nada encontrado" },
+  { cpf: "111.001.001-05", id: "cli-001", descricao: "Resgate de CDB em liquidação" },
+  { cpf: "222.002.002-93", id: "cli-002", descricao: "Resgate liquidado, crédito na conta" },
+  { cpf: "333.003.003-80", id: "cli-003", descricao: "CDB ativo, sem resgate" },
+  { cpf: "444.004.004-76", id: "cli-004", descricao: "Nada encontrado" },
+  { cpf: "555.005.005-62", id: "cli-005", descricao: "Garantia: liberado para a conta" },
+  { cpf: "666.006.006-59", id: "cli-006", descricao: "Garantia: em análise (cartão)" },
+  { cpf: "777.007.007-45", id: "cli-007", descricao: "Garantia: retido até pagar a fatura" },
+  { cpf: "888.008.008-31", id: "cli-008", descricao: "Garantia: retido parcialmente" },
 ] as const;

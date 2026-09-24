@@ -1,7 +1,7 @@
 JAVA_HOME ?= $(HOME)/.sdkman/candidates/java/25.0.2-tem
 export JAVA_HOME
 
-SERVICES := cdb-mcp tracking-money-mcp investimentos-agent ana-agent
+SERVICES := cdb-mcp tracking-money-mcp cred-mcp investimentos-agent ana-agent
 # Projetos com testes de integracao (@Tag("integration"), Testcontainers)
 IT_SERVICES := investimentos-agent ana-agent
 
@@ -64,13 +64,15 @@ db-down:
 db-reset:
 	$(COMPOSE_DB) rm -sfv postgres
 
-# Os dois MCP servers em background com saída prefixada (Ctrl+C encerra ambos). Não usam Postgres nem LLM.
+# Os três MCP servers em background com saída prefixada (Ctrl+C encerra todos). Não usam Postgres nem LLM.
 run-mcps:
 	@echo "cdb-mcp            -> http://localhost:8083/mcp"
 	@echo "tracking-money-mcp -> http://localhost:8082/mcp"
+	@echo "cred-mcp           -> http://localhost:8084/mcp"
 	@trap 'kill 0' INT TERM; \
 		( cd cdb-mcp && mvn -q spring-boot:run 2>&1 | awk '{ print "[cdb-mcp] " $$0; fflush() }' ) & \
 		( cd tracking-money-mcp && mvn -q spring-boot:run 2>&1 | awk '{ print "[tracking-money-mcp] " $$0; fflush() }' ) & \
+		( cd cred-mcp && mvn -q spring-boot:run 2>&1 | awk '{ print "[cred-mcp] " $$0; fflush() }' ) & \
 		wait
 
 # Especialista em localhost:8081 (espera os MCPs de run-mcps no ar: o DefaultMcpClient conecta no startup)

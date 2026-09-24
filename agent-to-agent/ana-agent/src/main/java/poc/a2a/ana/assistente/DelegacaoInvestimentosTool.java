@@ -5,6 +5,7 @@ import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.invocation.InvocationParameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import poc.a2a.ana.atendimento.HistoricoAtendimentos;
 import poc.a2a.ana.investimentos.InvestimentosClient;
 import poc.a2a.ana.investimentos.InvestimentosIndisponivelException;
 import poc.a2a.ana.investimentos.RespostaInvestimentos;
@@ -20,14 +21,18 @@ public class DelegacaoInvestimentosTool {
 
     private final InvestimentosClient investimentos;
     private final UltimasRespostasInvestimentos ultimas;
+    private final HistoricoAtendimentos historico;
 
-    public DelegacaoInvestimentosTool(InvestimentosClient investimentos, UltimasRespostasInvestimentos ultimas) {
+    public DelegacaoInvestimentosTool(InvestimentosClient investimentos, UltimasRespostasInvestimentos ultimas,
+                                      HistoricoAtendimentos historico) {
         this.investimentos = investimentos;
         this.ultimas = ultimas;
+        this.historico = historico;
     }
 
     @Tool(name = "delegar_investimentos", value = "Delega ao Especialista de Investimentos a tarefa de descobrir onde "
-            + "esta o dinheiro que o cliente tinha em investimentos (aplicado, em liquidacao de resgate ou ja na conta). "
+            + "esta o dinheiro que o cliente tinha em investimentos (aplicado, em liquidacao de resgate, retido em "
+            + "conta garantia por gastos no cartao ou ja na conta). "
             + "Use quando o cliente disser que o dinheiro estava em investimentos.")
     public String delegarInvestimentos(
             @P("Intencao do cliente em linguagem natural, ex.: cliente nao encontra dinheiro que estava em investimentos")
@@ -41,6 +46,7 @@ public class DelegacaoInvestimentosTool {
         try {
             RespostaInvestimentos resposta = investimentos.delegar(sessionId, customerId, pedido);
             ultimas.registrar(requestId, resposta);
+            registrarAtendimento(customerId, sessionId, resposta);
             log.info("ana.tool.delegar_investimentos.ok sessionId={} customerId={} durationMs={}", sessionId,
                     customerId, (System.nanoTime() - inicio) / 1_000_000);
             return resposta.paraTextoLlm();
@@ -48,6 +54,16 @@ public class DelegacaoInvestimentosTool {
             log.warn("ana.tool.delegar_investimentos.indisponivel sessionId={} motivo={} durationMs={}", sessionId,
                     e.getMessage(), (System.nanoTime() - inicio) / 1_000_000);
             return "INDISPONIVEL: nao foi possivel consultar o especialista de investimentos agora.";
+        }
+    }
+
+    /** O historico e acessorio: falha ao gravar nao pode derrubar o atendimento. */
+    private void registrarAtendimento(String customerId, String sessionId, RespostaInvestimentos resposta) {
+        try {
+            historico.registrar(customerId, sessionId, resposta);
+        } catch (RuntimeException e) {
+            log.warn("ana.atendimento.registro.falhou sessionId={} customerId={} erro={}", sessionId, customerId,
+                    e.toString());
         }
     }
 }

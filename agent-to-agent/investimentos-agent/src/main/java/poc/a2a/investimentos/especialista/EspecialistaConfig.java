@@ -51,6 +51,11 @@ public class EspecialistaConfig {
         return mcpClient("tracking-money-mcp", url);
     }
 
+    @Bean(destroyMethod = "close")
+    McpClient credMcpClient(@Value("${mcp.cred-url}") String url) {
+        return mcpClient("cred-mcp", url);
+    }
+
     private static McpClient mcpClient(String chave, String url) {
         return DefaultMcpClient.builder()
                 .key(chave)
@@ -65,9 +70,9 @@ public class EspecialistaConfig {
 
     /** failIfOneServerFails=false: um MCP fora não derruba o especialista; a falha vira risk na resposta. */
     @Bean
-    ToolProvider mcpToolProvider(McpClient cdbMcpClient, McpClient trackingMoneyMcpClient) {
+    ToolProvider mcpToolProvider(McpClient cdbMcpClient, McpClient trackingMoneyMcpClient, McpClient credMcpClient) {
         ToolProvider mcpToolProvider = McpToolProvider.builder()
-                .mcpClients(cdbMcpClient, trackingMoneyMcpClient)
+                .mcpClients(cdbMcpClient, trackingMoneyMcpClient, credMcpClient)
                 .failIfOneServerFails(false)
                 .build();
         return new ToolProviderComLog(mcpToolProvider);
