@@ -38,6 +38,14 @@ services:
       <<: *healthcheck
       test: ["CMD-SHELL", "curl -fs http://localhost:8082/actuator/health || exit 1"]
 
+  cred-mcp:
+    build: ./cred-mcp
+    ports:
+      - "8084:8084"
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "curl -fs http://localhost:8084/actuator/health || exit 1"]
+
   investimentos-agent:
     build: ./investimentos-agent
     ports:
