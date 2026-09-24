@@ -1,5 +1,6 @@
 package poc.a2a.ana.chat;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -16,11 +17,13 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import poc.a2a.ana.assistente.AnaAssistant;
 import poc.a2a.ana.assistente.DelegacaoInvestimentosTool;
+import poc.a2a.ana.assistente.UltimasConsultasCredito;
 import poc.a2a.ana.assistente.UltimasRespostasInvestimentos;
 import poc.a2a.ana.atendimento.FormatadorAtendimentos;
 import poc.a2a.ana.atendimento.HistoricoAtendimentos;
 import poc.a2a.ana.cliente.CadastroClientes;
 import poc.a2a.ana.cliente.Cpf;
+import poc.a2a.ana.credito.SolicitacaoCredito;
 import poc.a2a.ana.investimentos.RespostaInvestimentos;
 
 @RestController
@@ -34,13 +37,15 @@ public class ChatController {
     private final UltimasRespostasInvestimentos ultimas;
     private final CadastroClientes cadastro;
     private final HistoricoAtendimentos historico;
+    private final UltimasConsultasCredito ultimasCredito;
 
     public ChatController(AnaAssistant ana, UltimasRespostasInvestimentos ultimas, CadastroClientes cadastro,
-                          HistoricoAtendimentos historico) {
+                          HistoricoAtendimentos historico, UltimasConsultasCredito ultimasCredito) {
         this.ana = ana;
         this.ultimas = ultimas;
         this.cadastro = cadastro;
         this.historico = historico;
+        this.ultimasCredito = ultimasCredito;
     }
 
     @PostMapping("/chat")
@@ -63,15 +68,18 @@ public class ChatController {
         String anteriores = atendimentosAnteriores(customerId, requisicao.sessionId());
         String reply;
         RespostaInvestimentos respostaEspecialista;
+        List<SolicitacaoCredito> credito;
         try {
             reply = ana.conversar(requisicao.sessionId(), requisicao.message(), anteriores, parametros);
         } finally {
             respostaEspecialista = ultimas.remover(requestId);
+            credito = ultimasCredito.remover(requestId);
         }
-        log.info("ana.chat sessionId={} cpf={} customerId={} comHistorico={} delegou={} durationMs={}",
+        log.info("ana.chat sessionId={} cpf={} customerId={} comHistorico={} delegou={} consultouCredito={} durationMs={}",
                 requisicao.sessionId(), cpf.mascarado(), customerId, !FormatadorAtendimentos.NENHUM.equals(anteriores),
-                respostaEspecialista != null, (System.nanoTime() - inicio) / 1_000_000);
-        return new ChatResposta(requisicao.sessionId(), reply, debug ? respostaEspecialista : null);
+                respostaEspecialista != null, credito != null, (System.nanoTime() - inicio) / 1_000_000);
+        return new ChatResposta(requisicao.sessionId(), reply, debug ? respostaEspecialista : null,
+                debug ? credito : null);
     }
 
     @ExceptionHandler(ResponseStatusException.class)

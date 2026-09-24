@@ -3,6 +3,7 @@ package poc.a2a.ana.chat;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -18,8 +19,10 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.client.RestClient;
 import poc.a2a.ana.assistente.AnaAssistant;
 import poc.a2a.ana.assistente.DelegacaoInvestimentosTool;
+import poc.a2a.ana.assistente.UltimasConsultasCredito;
 import poc.a2a.ana.assistente.UltimasRespostasInvestimentos;
 import poc.a2a.ana.atendimento.HistoricoAtendimentosEmMemoria;
+import poc.a2a.ana.credito.SolicitacaoCredito;
 import poc.a2a.ana.investimentos.RespostaInvestimentos;
 import poc.a2a.ana.investimentos.SituacaoGarantia;
 import tools.jackson.databind.JsonNode;
@@ -38,14 +41,21 @@ class ChatControllerTest {
             return new HistoricoAtendimentosEmMemoria();
         }
 
-        /** Simula um turno com delegação: registra a resposta do especialista e ecoa o que recebeu. */
+        /** Simula um turno: "emprestimo" na mensagem registra uma consulta de credito, o resto delega ao especialista. */
         @Bean
-        AnaAssistant anaAssistant(UltimasRespostasInvestimentos ultimas) {
+        AnaAssistant anaAssistant(UltimasRespostasInvestimentos ultimas, UltimasConsultasCredito ultimasCredito) {
             return (sessionId, mensagem, anteriores, parametros) -> {
                 ultimaChamada.set(sessionId + "|" + mensagem + "|" + anteriores + "|" + parametros.asMap());
                 String requestId = parametros.get(DelegacaoInvestimentosTool.REQUEST_ID);
-                ultimas.registrar(requestId, new RespostaInvestimentos(List.of("fato"), "rascunho", 0.8,
-                        List.of(), List.of("cdb-mcp")));
+                if (mensagem.contains("emprestimo")) {
+                    ultimasCredito.registrar(requestId, List.of(new SolicitacaoCredito("sol-009",
+                            "EMPRESTIMO_PESSOAL", LocalDateTime.of(2026, 9, 20, 10, 30), "RECUSADA",
+                            new BigDecimal("30000.00"), "RENDA_INSUFICIENTE", "Renda insuficiente",
+                            "Simule um valor menor", null)));
+                } else {
+                    ultimas.registrar(requestId, new RespostaInvestimentos(List.of("fato"), "rascunho", 0.8,
+                            List.of(), List.of("cdb-mcp")));
+                }
                 return "eco: " + mensagem + " cliente=" + parametros.get(DelegacaoInvestimentosTool.CUSTOMER_ID)
                         + " anteriores=" + anteriores;
             };
@@ -91,6 +101,7 @@ class ChatControllerTest {
         assertThat(resposta.path("reply").asString())
                 .isEqualTo("eco: meu dinheiro sumiu cliente=cli-001 anteriores=nenhum");
         assertThat(resposta.path("debug").isNull()).isTrue();
+        assertThat(resposta.path("credito").isNull()).isTrue();
     }
 
     @Test
@@ -117,6 +128,7 @@ class ChatControllerTest {
 
         assertThat(resposta.path("debug").path("confidence").asDouble()).isEqualTo(0.8);
         assertThat(resposta.path("debug").path("sources").get(0).asString()).isEqualTo("cdb-mcp");
+        assertThat(resposta.path("credito").isNull()).isTrue();
     }
 
     @Test
@@ -161,5 +173,27 @@ class ChatControllerTest {
         assertThat(erro.status()).isEqualTo(400);
         assertThat(json.readTree(erro.corpo()).path("error").asString())
                 .isEqualTo("sessionId, cpf e message sao obrigatorios");
+    }
+
+    @Test
+    void modoDebugDevolveAsSolicitacoesDeCredito() {
+        JsonNode resposta = chat("?debug=true", """
+                {"sessionId":"s-cred","cpf":"999.009.009-28","message":"meu emprestimo foi recusado"}""");
+
+        assertThat(resposta.path("reply").asString()).contains("cliente=cli-009");
+        assertThat(resposta.path("debug").isNull()).isTrue();
+        JsonNode solicitacao = resposta.path("credito").get(0);
+        assertThat(solicitacao.path("status").asString()).isEqualTo("RECUSADA");
+        assertThat(solicitacao.path("motivoCodigo").asString()).isEqualTo("RENDA_INSUFICIENTE");
+        assertThat(solicitacao.path("dataSolicitacao").asString()).isEqualTo("2026-09-20T10:30:00");
+        assertThat(solicitacao.path("reavaliacaoApos").isNull()).isTrue();
+    }
+
+    @Test
+    void semDebugNaoExpoeCredito() {
+        JsonNode resposta = chat("", """
+                {"sessionId":"s-cred2","cpf":"999.009.009-28","message":"meu emprestimo foi recusado"}""");
+
+        assertThat(resposta.path("credito").isNull()).isTrue();
     }
 }

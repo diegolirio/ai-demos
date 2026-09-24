@@ -12,6 +12,10 @@ investimentos:
   # Único conhecimento que a Ana tem do especialista: a URL base (o Agent Card é descoberto dela)
   a2a-url: ${INVESTIMENTOS_A2A_URL:http://localhost:8081}
   timeout: 90s
+cred:
+  # A Ana fala MCP direto com o cred-mcp (solicitacoes de credito); conexao preguicosa, nao exige o cred-mcp no startup
+  mcp-url: ${CRED_MCP_URL:http://localhost:8084/mcp}
+  timeout: 10s
 llm:
   base-url: ${LLM_BASE_URL:https://api.openai.com/v1}
   api-key: ${LLM_API_KEY}

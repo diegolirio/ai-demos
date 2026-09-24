@@ -4,10 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -15,6 +18,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import poc.a2a.ana.BaseIntegrationTest;
+import poc.a2a.ana.credito.SolicitacaoCredito;
+import poc.a2a.ana.credito.SolicitacoesCredito;
 import poc.a2a.ana.investimentos.InvestimentosClient;
 import poc.a2a.ana.investimentos.RespostaInvestimentos;
 import tools.jackson.databind.JsonNode;
@@ -40,11 +45,27 @@ class ChatControllerIT extends BaseIntegrationTest {
     @MockitoBean
     private InvestimentosClient investimentosClient;
 
+    @MockitoBean
+    private SolicitacoesCredito solicitacoesCredito;
+
     private final JsonMapper json = JsonMapper.builder().build();
 
     private JsonNode chat(String sessionId, String message) {
         String body = json.writeValueAsString(new ChatRequisicao(sessionId, CPF, message));
         String resposta = restTestClient.post().uri("/chat")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class)
+                .returnResult()
+                .getResponseBody();
+        return json.readTree(resposta);
+    }
+
+    private JsonNode chatDebug(String sessionId, String cpf, String message) {
+        String body = json.writeValueAsString(new ChatRequisicao(sessionId, cpf, message));
+        String resposta = restTestClient.post().uri("/chat?debug=true")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(body)
                 .exchange()
@@ -96,5 +117,26 @@ class ChatControllerIT extends BaseIntegrationTest {
                 .expectStatus().isBadRequest();
 
         verifyNoInteractions(investimentosClient);
+    }
+
+    @Test
+    void perguntaSobreEmprestimoRecusadoConsultaOCreditoComOCustomerIdDaRequisicao() throws Exception {
+        String sessionId = "it-cred-" + UUID.randomUUID();
+        when(solicitacoesCredito.consultar(anyString())).thenReturn(List.of(new SolicitacaoCredito("sol-009",
+                "EMPRESTIMO_PESSOAL", LocalDateTime.of(2026, 9, 20, 10, 30), "RECUSADA", new BigDecimal("30000.00"),
+                "RENDA_INSUFICIENTE", "A parcela compromete mais do que o permitido da renda informada",
+                "Simule um valor menor", null)));
+
+        JsonNode resposta = chatDebug(sessionId, "999.009.009-28",
+                "minha solicitacao de emprestimo foi recusada, por que?");
+
+        assertThat(resposta.path("reply").asString()).isNotBlank();
+        // Modelo pequeno pode nao chamar a tool; se chamou, o customerId e o da requisicao (nunca do LLM).
+        var chamadas = mockingDetails(solicitacoesCredito).getInvocations();
+        if (!chamadas.isEmpty()) {
+            assertThat(chamadas).allSatisfy(c -> assertThat(c.getArguments()).containsExactly("cli-009"));
+            assertThat(resposta.path("credito").get(0).path("status").asString()).isEqualTo("RECUSADA");
+            assertThat(atendimentoRows("cli-009")).isGreaterThanOrEqualTo(1);
+        }
     }
 }
