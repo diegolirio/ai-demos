@@ -30,13 +30,31 @@ UI
 
 > Passo a passo completo para testar e explorar (LLM, chat web, hops, falhas): [docs/GUIA-TESTES.md](docs/GUIA-TESTES.md).
 
-Pré-requisitos: JDK 25 (`$HOME/.sdkman/candidates/java/25.0.2-tem`, ou `make JAVA_HOME=...`), Maven, Docker, `jq`,
-Node 24 + npm (Next 16 exige Node ≥ 20.9; `make up` roda `build`, que executa `npm ci && npm run build` do chat-web no host).
+### Rodar para explorar (caminho rápido, LLM local e grátis)
+
+Pré-requisitos: Docker rodando, JDK 25 (`$HOME/.sdkman/candidates/java/25.0.2-tem`, ou `make JAVA_HOME=...`), Maven,
+Node 24 + npm, `jq` e o **Ollama** (o LLM que a Ana e o especialista usam).
 
 ```bash
-cp .env.example .env    # preencha LLM_BASE_URL / LLM_API_KEY / LLM_MODEL
+brew install ollama                  # ou https://ollama.com/download
+ollama serve                         # deixe rodando em outro terminal (se o app do Ollama já estiver aberto, pule)
+ollama pull qwen2.5:7b               # só na primeira vez (~4,7 GB)
+cp .env.llm-local.example .env       # já aponta para o Ollama, sem chave
+make up                              # build + compose; espera todos healthy
+```
+
+Abra **http://localhost:3000**, clique num dos **CPFs de teste** (ex.: `888.008.008-31`, resgate retido parcialmente) e
+escreva "meu dinheiro sumiu" → "estava em investimentos". Depois clique em **Nova conversa** e diga "oi, voltei": a
+Ana lembra do atendimento anterior. Para conferir tudo de uma vez: `make smoke`. Para parar: `make down`.
+
+> Prefere OpenAI ou um gateway em vez do Ollama? `cp .env.example .env` e preencha `LLM_BASE_URL` / `LLM_API_KEY` /
+> `LLM_MODEL`. Modelos pequenos (7b) às vezes erram o tool calling; se a Ana não delegar, tente `qwen3:8b` ou maior.
+
+### Todos os comandos
+
+```bash
 make test               # só unitários (rápido, sem Docker nem LLM real)
-make test-integration   # testes de integração: Postgres + LLM real (Ollama) via Testcontainers — ver abaixo
+make test-integration   # Postgres + Ollama em containers (Testcontainers); não usa o Ollama local — ver abaixo
 make up                 # build + compose, espera todos healthy — o chat fica em http://localhost:3000
 make smoke              # jornada completa para os 8 CPFs de teste + retorno
 make smoke-falha        # derruba o especialista e confere o fallback da Ana
