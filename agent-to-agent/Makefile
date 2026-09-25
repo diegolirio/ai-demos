@@ -5,13 +5,17 @@ SERVICES := cdb-mcp tracking-money-mcp cred-mcp investimentos-agent ana-agent
 # Projetos com testes de integracao (@Tag("integration"), Testcontainers)
 IT_SERVICES := investimentos-agent ana-agent
 
-# Variaveis de ambiente (LLM_*) carregadas antes do spring-boot:run local
+# .env lido por scripts/llm-env.sh (LLM_PROVIDER e chaves)
 ENV_FILE ?= .env
-LOAD_ENV = set -a; [ -f $(ENV_FILE) ] && . ./$(ENV_FILE) || echo "[make] $(ENV_FILE) nao encontrado, seguindo sem ele"; set +a
-# O compose interpola LLM_API_KEY (obrigatoria) mesmo quando so o postgres sobe; o postgres nao usa o valor.
-COMPOSE_DB = LLM_API_KEY=$${LLM_API_KEY:-nao-usado-pelo-postgres} docker compose
+export ENV_FILE
+# LLM_PROVIDER (litellm|openrouter) -> LLM_BASE_URL/LLM_API_KEY/LLM_MODEL. Veja docs/AI-GATEWAY.md
+LLM_ENV = LLM_TARGET=docker . ./scripts/llm-env.sh
+LLM_ENV_LOCAL = LLM_TARGET=local . ./scripts/llm-env.sh
+COMPOSE_DB = docker compose
 
-.PHONY: build test test-integration up down logs ps smoke smoke-falha db-up db-down db-reset run-mcps run-investimentos run-ana run-web test-web
+AGENTS := ana-agent investimentos-agent
+
+.PHONY: llm-use llm-restart llm-status llm-compare llm-up build test test-integration up down logs ps smoke smoke-falha db-up db-down db-reset run-mcps run-investimentos run-ana run-web test-web
 
 build:
 	@for s in $(SERVICES); do echo "==> build $$s"; (cd $$s && mvn -q -DskipTests package) || exit 1; done
@@ -31,7 +35,7 @@ test-web:
 	cd chat-web && npm ci && npm run typecheck && npm run lint && npm test
 
 up: build
-	docker compose up -d --build --wait
+	@$(LLM_ENV) && docker compose up -d --build --wait
 
 down:
 	docker compose down -v
@@ -76,13 +80,54 @@ run-mcps:
 		wait
 
 # Especialista em localhost:8081 (espera os MCPs de run-mcps no ar: o DefaultMcpClient conecta no startup)
-run-investimentos: db-up
-	@$(LOAD_ENV); cd investimentos-agent && mvn spring-boot:run
+run-investimentos: db-up llm-up
+	@$(LLM_ENV_LOCAL) && cd investimentos-agent && mvn spring-boot:run
 
 # Ana em localhost:8080 (delegação A2A para localhost:8081)
-run-ana: db-up
-	@$(LOAD_ENV); cd ana-agent && mvn spring-boot:run
+run-ana: db-up llm-up
+	@$(LLM_ENV_LOCAL) && cd ana-agent && mvn spring-boot:run
 
 # Chat web em localhost:3000 (next dev), falando com a Ana em localhost:8080 (make run-ana ou make up)
 run-web:
 	cd chat-web && ([ -d node_modules ] || npm ci) && ANA_URL=$${ANA_URL:-http://localhost:8080} npm run dev
+
+# --- AI Gateway: LiteLLM x OpenRouter (docs/AI-GATEWAY.md) ---
+
+# Troca o provedor no .env: make llm-use P=openrouter (depois: make llm-restart)
+llm-use:
+	@case "$(P)" in litellm|openrouter) ;; *) echo "use: make llm-use P=litellm|openrouter"; exit 1;; esac
+	@touch $(ENV_FILE)
+	@if grep -q '^LLM_PROVIDER=' $(ENV_FILE); then perl -pi -e 's/^LLM_PROVIDER=.*/LLM_PROVIDER=$(P)/' $(ENV_FILE); \
+		else printf '\nLLM_PROVIDER=$(P)\n' >> $(ENV_FILE); fi
+	@echo "[llm] LLM_PROVIDER=$(P) em $(ENV_FILE). Rode make llm-restart para os agentes usarem."
+
+# Sobe o litellm (so quando o provedor e litellm), para rodar os agentes fora do Docker
+llm-up:
+	@$(LLM_ENV_LOCAL) && if [ "$$LLM_PROVIDER" = litellm ]; then docker compose up -d --wait litellm; fi
+
+# Recria so os agentes com o LLM atual (compose recria quando o env muda); o litellm sobe junto
+llm-restart:
+	@$(LLM_ENV) && docker compose up -d --wait litellm $(AGENTS)
+	@$(MAKE) -s llm-status
+
+# Provedor, URL e modelo que os agentes estao usando (sem mostrar chaves) + teste do endpoint a partir do Mac
+llm-status:
+	@$(LLM_ENV) && echo "provedor: $${LLM_PROVIDER:-<legado: LLM_* do .env>}" && echo "url:      $$LLM_BASE_URL" && echo "modelo:   $$LLM_MODEL" \
+		&& for a in $(AGENTS); do printf '%-20s %s\n' "$$a:" "$$(docker compose exec -T $$a printenv LLM_BASE_URL LLM_MODEL 2>/dev/null | paste -sd ' ' - || echo 'fora do ar')"; done \
+		&& url=$$(echo "$$LLM_BASE_URL" | sed -e 's#//litellm:#//localhost:#' -e 's#//host.docker.internal:#//localhost:#') \
+		&& code=$$(curl -s -o /dev/null -w '%{http_code}' -m 10 -H "Authorization: Bearer $$LLM_API_KEY" "$$url/models"); \
+		echo "GET $$url/models -> HTTP $$code"
+
+# Roda o smoke nos dois provedores e compara resultado e tempo. Volta ao provedor do .env no fim.
+llm-compare:
+	@resumo=""; for p in litellm openrouter; do \
+		echo; echo "======== $$p ========"; \
+		( LLM_PROVIDER=$$p; $(LLM_ENV) && docker compose up -d --wait litellm $(AGENTS) ) || { resumo="$$resumo\n$$p|-|nao configurado|-"; continue; }; \
+		modelo=$$(LLM_PROVIDER=$$p; $(LLM_ENV) && echo $$LLM_MODEL); \
+		ini=$$(date +%s); ./smoke-test.sh > .llm-compare-$$p.log 2>&1; st=$$?; fim=$$(date +%s); \
+		tail -1 .llm-compare-$$p.log; \
+		resumo="$$resumo\n$$p|$$modelo|$$(tail -1 .llm-compare-$$p.log)|$$((fim-ini))s"; \
+	done; \
+	echo; printf "provedor|modelo|smoke|tempo$$resumo\n" | column -t -s '|'; \
+	echo "(logs completos em .llm-compare-<provedor>.log)"; \
+	$(LLM_ENV) && docker compose up -d --wait $(AGENTS) >/dev/null

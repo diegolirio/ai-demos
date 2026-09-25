@@ -22,14 +22,23 @@ jq --version
 cp .env.example .env     # só na primeira vez
 ```
 
-Atalho para Ollama local: `cp .env.llm-local.example .env` (já vem configurado, sem chave).
+O `.env.example` já vem com `LLM_PROVIDER=litellm`: os agentes chamam o **LiteLLM** do compose (`localhost:4000`), que encaminha para o Ollama local (`qwen-local`) ou para o OpenRouter (`sonnet-or`, `gpt-mini-or`). Com `LLM_PROVIDER=openrouter` eles chamam o OpenRouter direto. Veja [AI-GATEWAY.md](AI-GATEWAY.md).
+
+```bash
+make llm-status                              # o que os agentes estão usando agora
+make llm-use P=openrouter && make llm-restart   # precisa de OPENROUTER_API_KEY no .env
+make llm-use P=litellm && make llm-restart
+make llm-compare                             # smoke nos dois, lado a lado
+```
+
+Sem `LLM_PROVIDER`, vale o modo antigo: `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` explícitos, conforme a tabela abaixo. Atalho para Ollama direto (sem gateway): `cp .env.llm-local.example .env`.
 
 Edite o `.env` **no seu editor**. Nunca cole a chave no chat nem faça commit dela; o `.env` está no `.gitignore`.
 
 | Opção | `LLM_BASE_URL` | `LLM_API_KEY` | `LLM_MODEL` | Observação |
 |---|---|---|---|---|
 | **Ollama local** (grátis) | `http://host.docker.internal:11434/v1` | `ollama` | `qwen2.5:7b` ou `qwen3:8b` | Instale em [ollama.com/download](https://ollama.com/download) e rode `ollama pull qwen2.5:7b`. Modelos pequenos erram mais em tool calling e JSON |
-| **LLM Gateway da AI Foundation** | URL do gateway + `/v1` | chave de QA do Haifa | nome do modelo no gateway | Caminho oficial da empresa |
+| **OpenRouter** | `https://openrouter.ai/api/v1` | `sk-or-...` | `anthropic/claude-sonnet-5` | Uma chave para centenas de modelos; precisa de créditos. Veja [AI-GATEWAY.md](AI-GATEWAY.md) |
 | **API da Anthropic** | `https://api.anthropic.com/v1` | `sk-ant-...` | `claude-sonnet-5` | Endpoint compatível com OpenAI; precisa de créditos na API |
 | **OpenAI** | `https://api.openai.com/v1` | `sk-...` | `gpt-4o-mini` | |
 

@@ -2,6 +2,7 @@
 
 Valida, em Java 25 + Spring Boot 4, a delegação **Supervisor → Especialista via A2A 1.0** e **Especialista → tools via MCP**.
 Design: `docs/superpowers/specs/2026-09-22-a2a-poc-design.md`.
+LLM Gateway (AI Gateway): por que usar, LiteLLM x OpenRouter e plano da POC em [docs/AI-GATEWAY.md](docs/AI-GATEWAY.md).
 
 ```
 cliente ─POST /chat─▶ ana-agent:8080 ─A2A JSON-RPC─▶ investimentos-agent:8081 ─MCP─▶ cdb-mcp:8083
@@ -41,7 +42,7 @@ Node 24 + npm, `jq` e o **Ollama** (o LLM que a Ana e o especialista usam).
 brew install ollama                  # ou https://ollama.com/download
 ollama serve                         # deixe rodando em outro terminal (se o app do Ollama já estiver aberto, pule)
 ollama pull qwen2.5:7b               # só na primeira vez (~4,7 GB)
-cp .env.llm-local.example .env       # já aponta para o Ollama, sem chave
+cp .env.example .env                 # LLM_PROVIDER=litellm: agentes -> LiteLLM :4000 -> Ollama, sem chave
 make up                              # build + compose; espera todos healthy
 ```
 
@@ -50,8 +51,10 @@ escreva "meu dinheiro sumiu" → "estava em investimentos". Depois clique em **N
 Ana lembra do atendimento anterior. Para a jornada de crédito, use 999.009.009-28 e pergunte "minha solicitação de
 empréstimo foi recusada, por quê?". Para conferir tudo de uma vez: `make smoke`. Para parar: `make down`.
 
-> Prefere OpenAI ou um gateway em vez do Ollama? `cp .env.example .env` e preencha `LLM_BASE_URL` / `LLM_API_KEY` /
-> `LLM_MODEL`. Modelos pequenos (7b) às vezes erram o tool calling; se a Ana não delegar, tente `qwen3:8b` ou maior.
+> Os agentes chamam o LLM por um **AI Gateway**: LiteLLM no compose (padrão) ou OpenRouter direto, trocados por
+> `LLM_PROVIDER`. Para usar modelos maiores, preencha `OPENROUTER_API_KEY` no `.env` e use `LITELLM_MODEL=sonnet-or`
+> ou `make llm-use P=openrouter && make llm-restart`. Detalhes em [docs/AI-GATEWAY.md](docs/AI-GATEWAY.md).
+> Modelos pequenos (7b) às vezes erram o tool calling; se a Ana não delegar, tente um modelo maior.
 
 ### Todos os comandos
 
@@ -64,6 +67,9 @@ make smoke-falha        # derruba o especialista e confere o fallback da Ana
 make logs               # hops: ana.chat, ana.tool.delegar_investimentos, a2a.task.*, mcp.tool.call
 make down
 make test-web          # frontend: typecheck + lint + vitest
+make llm-status         # provedor/URL/modelo em uso pelos agentes + teste do endpoint
+make llm-use P=openrouter && make llm-restart   # troca LiteLLM <-> OpenRouter sem rebuild
+make llm-compare        # smoke nos dois provedores, resultado e tempo lado a lado
 make run-web           # chat web em http://localhost:3000 (next dev), Ana em localhost:8080
 ```
 
