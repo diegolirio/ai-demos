@@ -22,6 +22,26 @@ services:
       <<: *healthcheck
       test: ["CMD-SHELL", "pg_isready -U agents -d agents"]
 
+  # AI Gateway self-hosted (docs/AI-GATEWAY.md). Os agentes nao dependem dele no startup: o cliente LLM e preguicoso,
+  # e com LLM_PROVIDER=openrouter ele nem e usado.
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    volumes:
+      - ./docker/litellm/config.yaml:/app/config.yaml:ro
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-litellm-poc}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://host.docker.internal:11434/v1}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "4000:4000"
+    healthcheck:
+      <<: *healthcheck
+      # imagem sem curl garantido; python sempre existe
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\" || exit 1"]
+
   cdb-mcp:
     build: ./cdb-mcp
     ports:
@@ -51,9 +71,10 @@ services:
     ports:
       - "8081:8081"
     environment:
-      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
-      LLM_API_KEY: ${LLM_API_KEY:?defina LLM_API_KEY no .env}
-      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      # Resolvidos por scripts/llm-env.sh a partir de LLM_PROVIDER (make up / llm-restart). Sem o script, cai no LiteLLM.
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://litellm:4000/v1}
+      LLM_API_KEY: ${LLM_API_KEY:-${LITELLM_MASTER_KEY:-sk-litellm-poc}}
+      LLM_MODEL: ${LLM_MODEL:-${LITELLM_MODEL:-qwen-local}}
       A2A_PUBLIC_URL: http://investimentos-agent:8081
       CDB_MCP_URL: http://cdb-mcp:8083/mcp
       TRACKING_MONEY_MCP_URL: http://tracking-money-mcp:8082/mcp
@@ -77,9 +98,10 @@ services:
     ports:
       - "8080:8080"
     environment:
-      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
-      LLM_API_KEY: ${LLM_API_KEY:?defina LLM_API_KEY no .env}
-      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      # Resolvidos por scripts/llm-env.sh a partir de LLM_PROVIDER (make up / llm-restart). Sem o script, cai no LiteLLM.
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://litellm:4000/v1}
+      LLM_API_KEY: ${LLM_API_KEY:-${LITELLM_MASTER_KEY:-sk-litellm-poc}}
+      LLM_MODEL: ${LLM_MODEL:-${LITELLM_MODEL:-qwen-local}}
       INVESTIMENTOS_A2A_URL: http://investimentos-agent:8081
       # MCP direto (solicitacoes de credito). Sem depends_on: a conexao e preguicosa e a Ana sobe sem o cred-mcp.
       CRED_MCP_URL: http://cred-mcp:8084/mcp

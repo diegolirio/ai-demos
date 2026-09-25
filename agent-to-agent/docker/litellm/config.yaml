@@ -1,0 +1,28 @@
+# LiteLLM Proxy: os agentes chamam http://litellm:4000/v1 com LITELLM_MASTER_KEY e um dos apelidos abaixo (LITELLM_MODEL).
+# Trocar o modelo real de um apelido nao exige mudar nem reiniciar os agentes, so o litellm.
+model_list:
+  # Ollama no host (gratis). Rota OpenAI-compatible (/v1), a mesma que os agentes usavam direto.
+  - model_name: qwen-local
+    litellm_params:
+      model: openai/qwen2.5:7b
+      api_base: os.environ/OLLAMA_API_BASE
+      api_key: ollama
+
+  # OpenRouter como provedor do LiteLLM (a chave do OpenRouter fica so aqui, nunca nos agentes)
+  - model_name: sonnet-or
+    litellm_params:
+      model: openrouter/anthropic/claude-sonnet-5
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  - model_name: gpt-mini-or
+    litellm_params:
+      model: openrouter/openai/gpt-4o-mini
+      api_key: os.environ/OPENROUTER_API_KEY
+
+litellm_settings:
+  # Descarta parametros que o provedor nao suporta em vez de falhar a chamada
+  drop_params: true
+
+general_settings:
+  # Sem Postgres: so a master key. Virtual keys, orcamento e painel de gasto ficam para a proxima etapa (docs/AI-GATEWAY.md §7)
+  master_key: os.environ/LITELLM_MASTER_KEY
