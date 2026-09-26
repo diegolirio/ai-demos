@@ -9,6 +9,9 @@ cliente ─POST /chat─▶ ana-agent:8080 ─A2A JSON-RPC─▶ investimentos-a
                           │                                                    └─MCP─▶ tracking-money-mcp:8082
                           │                                                    └─MCP─▶ cred-mcp:8084
                           └─MCP (McpClient direto, solicitações de crédito)─────────────▶ cred-mcp:8084
+
+ana-agent + investimentos-agent ─LLM (API OpenAI)─▶ litellm:4000 ─┬─▶ Ollama (host, qwen-local)
+                                                                  └─▶ OpenRouter (sonnet-or, gpt-mini-or)
 ```
 
 ```mermaid
@@ -18,12 +21,25 @@ graph LR
       CDB[cdb-mcp :8083]
       TM[tracking-money-mcp :8082]
       CRED[cred-mcp :8084]
-  
+
+      subgraph GW["AI Gateway (LLM_PROVIDER=litellm)"]
+            LiteLLM[litellm :4000]
+      end
+      Ollama[(Ollama no host<br/>qwen-local)]
+      OR[(OpenRouter<br/>sonnet-or / gpt-mini-or)]
+
       Ana -->|A2A JSON-RPC| Invest
       Ana -->|MCP direto: solicitações de crédito| CRED
       Invest -->|MCP| CDB
       Invest -->|MCP| TM
       Invest -->|MCP| CRED
+
+      Ana -->|LLM| LiteLLM
+      Invest -->|LLM| LiteLLM
+      LiteLLM --> Ollama
+      LiteLLM --> OR
+      Ana -.->|LLM_PROVIDER=openrouter| OR
+      Invest -.->|LLM_PROVIDER=openrouter| OR
 ```
 UI
 <img width="1383" height="707" alt="image" src="https://github.com/user-attachments/assets/a70736cc-3c97-4ed9-bd88-228ff38bbe0d" />
