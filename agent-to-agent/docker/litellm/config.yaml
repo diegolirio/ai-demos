@@ -29,6 +29,7 @@ general_settings:
 
 # MCP gateway: os agentes acessam /{servidor}/mcp com a master key. O LiteLLM prefixa as tools com
 # "{servidor}-" (fixo no codigo dele); o especialista remove o prefixo no cliente (NomeTool).
+# Os aliases dos servidores abaixo nao podem conter "-": o NomeTool remove so ate o primeiro "-".
 mcp_servers:
   cdb_mcp:
     url: "http://cdb-mcp:8083/mcp"

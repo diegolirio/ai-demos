@@ -48,7 +48,7 @@ ana + investimentos ── LLM ──▶ litellm:4000/v1 (sem mudança)
   - `ana-agent` sem `depends_on` no LiteLLM (conexão preguiçosa);
   - URLs `CDB_MCP_URL`, `TRACKING_MONEY_MCP_URL` e `CRED_MCP_URL` apontando para o gateway;
   - nova variável `MCP_GATEWAY_KEY: ${LITELLM_MASTER_KEY:-sk-litellm-poc}` nos dois agentes.
-- **`Makefile`:** `llm-status` também testa `tools/list` em `http://localhost:4000/cdb_mcp/mcp` com a master key.
+- **`Makefile`:** `llm-status` também testa `initialize` em `http://localhost:4000/cdb_mcp/mcp` com a master key.
 
 ### 4.2 Código
 

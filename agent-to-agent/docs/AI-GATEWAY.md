@@ -147,7 +147,7 @@ LLM_PROVIDER=openrouter  ana/investimentos ────────────�
 | Arquivo | Mudança |
 |---|---|
 | `docker/litellm/config.yaml` (novo) | Apelidos `qwen-local` (Ollama), `sonnet-or` e `gpt-mini-or` (OpenRouter). Autenticação por `LITELLM_MASTER_KEY`, sem banco |
-| `docker-compose.yml` | Serviço `litellm` (imagem oficial, porta 4000, healthcheck). Os agentes usam `http://litellm:4000/v1` como padrão, sem `depends_on` (o cliente LLM é preguiçoso e, com `openrouter`, o LiteLLM nem é usado) |
+| `docker-compose.yml` | Serviço `litellm` (imagem oficial, porta 4000, healthcheck). Os agentes usam `http://litellm:4000/v1` como padrão, sem `depends_on` (o cliente LLM é preguiçoso e, com `openrouter`, o LiteLLM nem é usado) (até o MCP gateway, §6.1: agora o especialista depende do LiteLLM, que também serve as tools) |
 | `scripts/llm-env.sh` (novo) | Traduz `LLM_PROVIDER` em `LLM_BASE_URL`, `LLM_API_KEY` e `LLM_MODEL` (host do compose ou `localhost` fora do Docker). Falha com mensagem clara se faltar chave |
 | `Makefile` | `up`/`run-*` usam o script, mais os targets `llm-use P=<provider>`, `llm-restart` (recria só os agentes), `llm-status` (sem mostrar as chaves) e `llm-compare` (smoke nos dois provedores, com tempo lado a lado) |
 | `.env.example` | `LLM_PROVIDER=litellm`, `LITELLM_MASTER_KEY`, `LITELLM_MODEL`, `OPENROUTER_API_KEY` e `OPENROUTER_MODEL`. Um `.env` sem `LLM_PROVIDER` continua funcionando como hoje |
@@ -183,7 +183,7 @@ No compose, os agentes acessam `cdb-mcp`, `tracking-money-mcp` e `cred-mcp` **se
 | Nomes das tools | O LiteLLM **sempre** prefixa (`cdb_mcp-listar_posicoes_cdb`), fixo no código dele. O especialista remove o prefixo no cliente (`NomeTool` + `toolNameMapper`), então LLM, prompt e allowlist não mudam; a execução usa o nome com prefixo. A Ana chama `consultar_solicitacoes_credito` sem prefixo, que o gateway aceita |
 | Dependências | O especialista espera o LiteLLM healthy (conecta nos MCPs no startup); o LiteLLM espera os três MCPs. A Ana não depende (conexão preguiçosa) |
 | Fora do Docker | `make run-*` e os testes de integração continuam direto nos MCPs (`localhost`), sem header |
-| Versão | Imagem fixada em `v1.102.1`: o MCP gateway do LiteLLM está em `_experimental` |
+| Versão | Imagem fixada em `v1.102.1`: o MCP gateway do LiteLLM está em `_experimental`. Ao atualizar a imagem, reconferir o formato do prefixo das tools e se `tools/call` com o nome sem prefixo continua aceito (a Ana depende disso) |
 
 **Evidências do spike (LiteLLM 1.102.1):** `initialize`, `tools/list` e `tools/call` funcionam pelo gateway nos três MCPs (Streamable HTTP, SDK Java 2.0.1). `tools/call` aceita nome com e sem prefixo, com o mesmo resultado da chamada direta.
 

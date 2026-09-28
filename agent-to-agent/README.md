@@ -152,7 +152,7 @@ teste); por isso o timeout do `ChatModel` é configurável (`llm.timeout`, defau
 | Quem preenche `customerId` | Java, de `InvocationParameters` (CPF → cadastro) | o LLM, copiando do pedido A2A |
 | Retorno ao LLM | texto montado em Java, **sem** `motivoCodigo` | JSON cru do MCP |
 | Falha | `INDISPONIVEL` determinístico + histórico + debug | erro da tool volta ao LLM (vira `risks`) |
-| Tool nova no servidor | exige um método Java | aparece sozinha (aqui filtrada por `filterToolNames`) |
+| Tool nova no servidor | exige um método Java | aparece sozinha (aqui filtrada por `filter` allowlist, sem o prefixo do gateway) |
 
 Os dois são tool calling; muda quem implementa a tool que o LLM enxerga. Spec: `docs/superpowers/specs/2026-09-23-ana-credito-solicitacoes-design.md`.
 
@@ -160,7 +160,7 @@ Os dois são tool calling; muda quem implementa a tool que o LLM enxerga. Spec: 
 
 | Agente | Classe | Modelo | Descrição | Pros | Contras |
 |---|---|---|---|---|---|
-| investimentos-agent | `EspecialistaConfig` (bean `mcpToolProvider`) | `McpToolProvider` (LangChain4j) + `DefaultMcpClient` por servidor (cdb-mcp, tracking-money-mcp, cred-mcp) | O LLM descobre e escolhe as tools sozinho; `filterToolNames` restringe a allowlist, e `customerId` é preenchido pelo próprio LLM copiando do pedido A2A. | Tool nova no servidor aparece sozinha (sem código); menos boilerplate para múltiplas tools; um único `ToolProvider` cobre N servidores; `failIfOneServerFails=false` isola falha de um MCP sem derrubar os demais. | `customerId` fica exposto ao LLM nos argumentos — risco de prompt injection levar a consultar outro cliente; retorno é o JSON cru do MCP; erro de tool vira `risks` sem tratamento determinístico. |
+| investimentos-agent | `EspecialistaConfig` (bean `mcpToolProvider`) | `McpToolProvider` (LangChain4j) + `DefaultMcpClient` por servidor (cdb-mcp, tracking-money-mcp, cred-mcp) | O LLM descobre e escolhe as tools sozinho; `filter` por allowlist (sem o prefixo do gateway) + `toolNameMapper` restringem e traduzem os nomes, e `customerId` é preenchido pelo próprio LLM copiando do pedido A2A. | Tool nova no servidor aparece sozinha (sem código); menos boilerplate para múltiplas tools; um único `ToolProvider` cobre N servidores; `failIfOneServerFails=false` isola falha de um MCP sem derrubar os demais. | `customerId` fica exposto ao LLM nos argumentos — risco de prompt injection levar a consultar outro cliente; retorno é o JSON cru do MCP; erro de tool vira `risks` sem tratamento determinístico. |
 | ana-agent | `CredMcpSolicitacoesCredito` | `McpClient` (`DefaultMcpClient`) direto, exposto como `@Tool` Java sem parâmetros | Java monta a chamada `executeTool` explicitamente (uma única tool fixa, `consultar_solicitacoes_credito`); `customerId` vem do cadastro resolvido em Java, nunca do LLM, com conexão lazy e client descartado em falha/timeout. | `customerId` nunca passa pelo LLM (sem risco de injection); controle fino de erro/timeout (sentinela, reconexão, exceção de domínio `CreditoIndisponivelException`); resposta formatada em Java antes de voltar ao LLM. | Tool nova no servidor exige código Java novo; não escala bem para múltiplas tools/servidores (um adaptador por tool); mais boilerplate (parsing manual, gestão de ciclo de vida do client). |
 
 ## Fluxo ponta a ponta
@@ -188,6 +188,7 @@ sequenceDiagram
         participant ES as EspecialistaInvestimentos
         participant TP as ToolExecutorComLog → DefaultMcpClient
     end
+    participant GW as litellm:4000 (MCP gateway)
     participant CDB as cdb-mcp (:8083)<br/>CdbTools / CdbRepository
     participant TM as tracking-money-mcp (:8082)<br/>TrackingMoneyTools / TrackingMoneyRepository
     participant CRED as cred-mcp (:8084)<br/>ContaGarantiaTools / ContaGarantiaRepository
@@ -217,14 +218,20 @@ sequenceDiagram
         LLM-->>ES: tool call
         ES->>TP: executa a tool (loga tool, contextId, durationMs)
         alt tools de CDB
-            TP->>CDB: MCP tools/call listar_resgates_cdb / listar_posicoes_cdb
-            CDB-->>TP: JSON com resgates e posições
+            TP->>GW: MCP tools/call cdb_mcp-listar_resgates_cdb / cdb_mcp-listar_posicoes_cdb
+            GW->>CDB: MCP tools/call listar_resgates_cdb / listar_posicoes_cdb
+            CDB-->>GW: JSON com resgates e posições
+            GW-->>TP: JSON com resgates e posições
         else tools de conta
-            TP->>TM: MCP tools/call listar_movimentacoes / consultar_status_transferencia
-            TM-->>TP: JSON com movimentações e status
+            TP->>GW: MCP tools/call tracking_money_mcp-listar_movimentacoes / tracking_money_mcp-consultar_status_transferencia
+            GW->>TM: MCP tools/call listar_movimentacoes / consultar_status_transferencia
+            TM-->>GW: JSON com movimentações e status
+            GW-->>TP: JSON com movimentações e status
         else tool de conta garantia
-            TP->>CRED: MCP tools/call consultar_conta_garantia
-            CRED-->>TP: JSON com retenções (status, retido, liberado)
+            TP->>GW: MCP tools/call cred_mcp-consultar_conta_garantia
+            GW->>CRED: MCP tools/call consultar_conta_garantia
+            CRED-->>GW: JSON com retenções (status, retido, liberado)
+            GW-->>TP: JSON com retenções (status, retido, liberado)
         end
         TP-->>ES: resultado da tool
     end
