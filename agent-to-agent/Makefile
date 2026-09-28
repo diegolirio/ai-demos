@@ -116,7 +116,12 @@ llm-status:
 		&& for a in $(AGENTS); do printf '%-20s %s\n' "$$a:" "$$(docker compose exec -T $$a printenv LLM_BASE_URL LLM_MODEL 2>/dev/null | paste -sd ' ' - || echo 'fora do ar')"; done \
 		&& url=$$(echo "$$LLM_BASE_URL" | sed -e 's#//litellm:#//localhost:#' -e 's#//host.docker.internal:#//localhost:#') \
 		&& code=$$(curl -s -o /dev/null -w '%{http_code}' -m 10 -H "Authorization: Bearer $$LLM_API_KEY" "$$url/models"); \
-		echo "GET $$url/models -> HTTP $$code"
+		echo "GET $$url/models -> HTTP $$code"; \
+		mcp=$$(curl -s -o /dev/null -w '%{http_code}' -m 10 -X POST http://localhost:4000/cdb_mcp/mcp \
+			-H "x-litellm-api-key: Bearer $${LITELLM_MASTER_KEY:-sk-litellm-poc}" -H 'Content-Type: application/json' \
+			-H 'Accept: application/json, text/event-stream' \
+			-d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"llm-status","version":"0"}}}'); \
+		echo "MCP gateway POST http://localhost:4000/cdb_mcp/mcp initialize -> HTTP $$mcp"
 
 # Roda o smoke nos dois provedores e compara resultado e tempo. Volta ao provedor do .env no fim.
 llm-compare:
