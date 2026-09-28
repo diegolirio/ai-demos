@@ -22,6 +22,8 @@ mcp:
   cdb-url: ${CDB_MCP_URL:http://localhost:8083/mcp}
   tracking-money-url: ${TRACKING_MONEY_MCP_URL:http://localhost:8082/mcp}
   cred-url: ${CRED_MCP_URL:http://localhost:8084/mcp}
+  # Chave do LiteLLM (MCP gateway). Vazia = acesso direto ao MCP, sem header (fora do compose).
+  gateway-key: ${MCP_GATEWAY_KEY:}
 memoria:
   jdbc-url: ${DB_URL:jdbc:postgresql://localhost:55432/agents?currentSchema=investimentos}
   usuario: ${DB_USER:agents}

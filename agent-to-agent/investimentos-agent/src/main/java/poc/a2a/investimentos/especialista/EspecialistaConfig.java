@@ -2,6 +2,7 @@ package poc.a2a.investimentos.especialista;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 
 import javax.sql.DataSource;
 
@@ -41,32 +42,42 @@ public class EspecialistaConfig {
                 .build();
     }
 
-    /** DefaultMcpClient conecta no construtor: o MCP server precisa estar no ar (compose usa depends_on healthy). */
+    /**
+     * DefaultMcpClient conecta no construtor: o MCP precisa estar no ar. No compose a URL e o LiteLLM
+     * (MCP gateway, /{servidor}/mcp) e o compose espera ele ficar healthy.
+     */
     @Bean(destroyMethod = "close")
-    McpClient cdbMcpClient(@Value("${mcp.cdb-url}") String url) {
-        return mcpClient("cdb-mcp", url);
+    McpClient cdbMcpClient(@Value("${mcp.cdb-url}") String url, @Value("${mcp.gateway-key:}") String gatewayKey) {
+        return mcpClient("cdb-mcp", url, gatewayKey);
     }
 
     @Bean(destroyMethod = "close")
-    McpClient trackingMoneyMcpClient(@Value("${mcp.tracking-money-url}") String url) {
-        return mcpClient("tracking-money-mcp", url);
+    McpClient trackingMoneyMcpClient(@Value("${mcp.tracking-money-url}") String url,
+                                     @Value("${mcp.gateway-key:}") String gatewayKey) {
+        return mcpClient("tracking-money-mcp", url, gatewayKey);
     }
 
     @Bean(destroyMethod = "close")
-    McpClient credMcpClient(@Value("${mcp.cred-url}") String url) {
-        return mcpClient("cred-mcp", url);
+    McpClient credMcpClient(@Value("${mcp.cred-url}") String url, @Value("${mcp.gateway-key:}") String gatewayKey) {
+        return mcpClient("cred-mcp", url, gatewayKey);
     }
 
-    private static McpClient mcpClient(String chave, String url) {
+    private static McpClient mcpClient(String chave, String url, String gatewayKey) {
         return DefaultMcpClient.builder()
                 .key(chave)
                 .clientName("investimentos-agent")
                 .transport(StreamableHttpMcpTransport.builder()
                         .url(url)
                         .timeout(Duration.ofSeconds(30))
+                        .customHeaders(cabecalhosGateway(gatewayKey))
                         .build())
                 .toolExecutionTimeout(Duration.ofSeconds(30))
                 .build();
+    }
+
+    /** Autenticacao no LiteLLM (MCP gateway). Sem chave (acesso direto ao MCP, fora do compose), nenhum header. */
+    static Map<String, String> cabecalhosGateway(String chave) {
+        return chave == null || chave.isBlank() ? Map.of() : Map.of("x-litellm-api-key", "Bearer " + chave);
     }
 
     /**
@@ -76,12 +87,17 @@ public class EspecialistaConfig {
     static final List<String> TOOLS_DO_ESPECIALISTA = List.of("listar_posicoes_cdb", "listar_resgates_cdb",
             "listar_movimentacoes", "consultar_status_transferencia", "consultar_conta_garantia");
 
-    /** failIfOneServerFails=false: um MCP fora não derruba o especialista; a falha vira risk na resposta. */
+    /**
+     * failIfOneServerFails=false: um MCP fora não derruba o especialista; a falha vira risk na resposta.
+     * Pelo gateway as tools chegam como "{servidor}-{tool}": o filtro roda ANTES do mapper (compara sem prefixo)
+     * e o mapper mostra ao LLM o nome original. A execucao usa o nome real (com prefixo), aceito pelo gateway.
+     */
     static McpToolProvider provedorMcp(McpClient... clients) {
         return McpToolProvider.builder()
                 .mcpClients(clients)
                 .failIfOneServerFails(false)
-                .filterToolNames(TOOLS_DO_ESPECIALISTA)
+                .filter((client, spec) -> TOOLS_DO_ESPECIALISTA.contains(NomeTool.semPrefixo(spec.name())))
+                .toolNameMapper((client, spec) -> NomeTool.semPrefixo(spec.name()))
                 .build();
     }
 
