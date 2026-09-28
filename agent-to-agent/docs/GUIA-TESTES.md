@@ -31,6 +31,15 @@ make llm-use P=litellm && make llm-restart
 make llm-compare                             # smoke nos dois, lado a lado
 ```
 
+As tools MCP também passam pelo LiteLLM (`/{servidor}/mcp`). Para listar as do cred-mcp pelo gateway:
+
+```bash
+curl -s -X POST http://localhost:4000/cred_mcp/mcp -H "x-litellm-api-key: Bearer ${LITELLM_MASTER_KEY:-sk-litellm-poc}" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | sed -n '/^data: /s/^data: //p' | jq -c '[.result.tools[].name]'
+# ["cred_mcp-consultar_conta_garantia","cred_mcp-consultar_solicitacoes_credito"]  (prefixo do gateway)
+```
+
 Sem `LLM_PROVIDER`, vale o modo antigo: `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` explícitos, conforme a tabela abaixo. Atalho para Ollama direto (sem gateway): `cp .env.llm-local.example .env`.
 
 Edite o `.env` **no seu editor**. Nunca cole a chave no chat nem faça commit dela; o `.env` está no `.gitignore`.
@@ -114,7 +123,7 @@ Também vale testar:
 
 ### Jornada "solicitação de crédito" (Ana → cred-mcp direto, sem A2A)
 
-Pergunte, por exemplo, "minha solicitação de empréstimo foi recusada, por quê?". A Ana chama `consultar_solicitacoes_credito` já no primeiro turno. O painel mostra o bloco **Solicitações de crédito (MCP direto)**, com o `motivoCodigo` marcado como interno. A resposta da Ana **nunca** deve conter esse código.
+Pergunte, por exemplo, "minha solicitação de empréstimo foi recusada, por quê?". A Ana chama `consultar_solicitacoes_credito` já no primeiro turno. O painel mostra o bloco **Solicitações de crédito (MCP, sem A2A)**, com o `motivoCodigo` marcado como interno. A resposta da Ana **nunca** deve conter esse código.
 
 | CPF | O que a Ana deve dizer | O que olhar no painel |
 |---|---|---|

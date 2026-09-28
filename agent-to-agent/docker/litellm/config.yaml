@@ -26,3 +26,17 @@ litellm_settings:
 general_settings:
   # Sem Postgres: so a master key. Virtual keys, orcamento e painel de gasto ficam para a proxima etapa (docs/AI-GATEWAY.md §7)
   master_key: os.environ/LITELLM_MASTER_KEY
+
+# MCP gateway: os agentes acessam /{servidor}/mcp com a master key. O LiteLLM prefixa as tools com
+# "{servidor}-" (fixo no codigo dele); o especialista remove o prefixo no cliente (NomeTool).
+# Os aliases dos servidores abaixo nao podem conter "-": o NomeTool remove so ate o primeiro "-".
+mcp_servers:
+  cdb_mcp:
+    url: "http://cdb-mcp:8083/mcp"
+    transport: "http"
+  tracking_money_mcp:
+    url: "http://tracking-money-mcp:8082/mcp"
+    transport: "http"
+  cred_mcp:
+    url: "http://cred-mcp:8084/mcp"
+    transport: "http"

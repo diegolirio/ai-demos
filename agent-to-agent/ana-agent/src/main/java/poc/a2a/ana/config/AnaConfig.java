@@ -95,8 +95,9 @@ public class AnaConfig {
      */
     @Bean(destroyMethod = "close")
     CredMcpSolicitacoesCredito solicitacoesCredito(@Value("${cred.mcp-url}") String url,
-                                                   @Value("${cred.timeout}") Duration timeout) {
-        return CredMcpSolicitacoesCredito.conectandoEm(url, timeout);
+                                                   @Value("${cred.timeout}") Duration timeout,
+                                                   @Value("${cred.gateway-key:}") String gatewayKey) {
+        return CredMcpSolicitacoesCredito.conectandoEm(url, timeout, gatewayKey);
     }
 
     @Bean

@@ -13,9 +13,12 @@ investimentos:
   a2a-url: ${INVESTIMENTOS_A2A_URL:http://localhost:8081}
   timeout: 90s
 cred:
-  # A Ana fala MCP direto com o cred-mcp (solicitacoes de credito); conexao preguicosa, nao exige o cred-mcp no startup
+  # A Ana fala MCP com o cred-mcp (solicitacoes de credito); no compose, pelo LiteLLM (MCP gateway).
+  # Conexao preguicosa, nao exige o cred-mcp nem o gateway no startup.
   mcp-url: ${CRED_MCP_URL:http://localhost:8084/mcp}
   timeout: 10s
+  # Chave do LiteLLM. Vazia = acesso direto ao cred-mcp, sem header (fora do compose).
+  gateway-key: ${MCP_GATEWAY_KEY:}
 llm:
   base-url: ${LLM_BASE_URL:https://api.openai.com/v1}
   api-key: ${LLM_API_KEY}

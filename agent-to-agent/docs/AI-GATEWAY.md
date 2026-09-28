@@ -2,7 +2,7 @@
 
 Este documento reúne o que é um AI Gateway, por que usar um e como ele se encaixa nesta POC. Também compara as duas opções que queremos avaliar: o **LiteLLM** e o **OpenRouter**.
 
-> Status: a seção 6 (LiteLLM no compose + OpenRouter, alternados por `LLM_PROVIDER`) está **implementada**. A seção 7 é o próximo passo.
+> Status: a seção 6 (LiteLLM no compose + OpenRouter, alternados por `LLM_PROVIDER`) está **implementada**, incluindo o MCP gateway (seção 6.1): LiteLLM na frente de `cdb-mcp`, `tracking-money-mcp` e `cred-mcp`. A seção 7 é o próximo passo.
 
 ---
 
@@ -147,7 +147,7 @@ LLM_PROVIDER=openrouter  ana/investimentos ────────────�
 | Arquivo | Mudança |
 |---|---|
 | `docker/litellm/config.yaml` (novo) | Apelidos `qwen-local` (Ollama), `sonnet-or` e `gpt-mini-or` (OpenRouter). Autenticação por `LITELLM_MASTER_KEY`, sem banco |
-| `docker-compose.yml` | Serviço `litellm` (imagem oficial, porta 4000, healthcheck). Os agentes usam `http://litellm:4000/v1` como padrão, sem `depends_on` (o cliente LLM é preguiçoso e, com `openrouter`, o LiteLLM nem é usado) |
+| `docker-compose.yml` | Serviço `litellm` (imagem oficial, porta 4000, healthcheck). Os agentes usam `http://litellm:4000/v1` como padrão, sem `depends_on` (o cliente LLM é preguiçoso e, com `openrouter`, o LiteLLM nem é usado) (até o MCP gateway, §6.1: agora o especialista depende do LiteLLM, que também serve as tools) |
 | `scripts/llm-env.sh` (novo) | Traduz `LLM_PROVIDER` em `LLM_BASE_URL`, `LLM_API_KEY` e `LLM_MODEL` (host do compose ou `localhost` fora do Docker). Falha com mensagem clara se faltar chave |
 | `Makefile` | `up`/`run-*` usam o script, mais os targets `llm-use P=<provider>`, `llm-restart` (recria só os agentes), `llm-status` (sem mostrar as chaves) e `llm-compare` (smoke nos dois provedores, com tempo lado a lado) |
 | `.env.example` | `LLM_PROVIDER=litellm`, `LITELLM_MASTER_KEY`, `LITELLM_MODEL`, `OPENROUTER_API_KEY` e `OPENROUTER_MODEL`. Um `.env` sem `LLM_PROVIDER` continua funcionando como hoje |
@@ -172,16 +172,38 @@ make llm-compare
 
 ---
 
+## 6.1 MCP Gateway (LiteLLM na frente dos MCP servers)
+
+No compose, os agentes acessam `cdb-mcp`, `tracking-money-mcp` e `cred-mcp` **sempre pelo LiteLLM**, que passa a ser o gateway único de LLM e MCP. Design: [2026-09-28-mcp-gateway-litellm-design.md](superpowers/specs/2026-09-28-mcp-gateway-litellm-design.md).
+
+| Aspecto | Como ficou |
+|---|---|
+| Endpoints | Um por servidor: `/cdb_mcp/mcp`, `/tracking_money_mcp/mcp`, `/cred_mcp/mcp`. Mantém um `McpClient` por MCP e o isolamento de falha (`failIfOneServerFails(false)`) |
+| Autenticação | Master key (`LITELLM_MASTER_KEY`) no header `x-litellm-api-key: Bearer ...`. Sem ela: 401 |
+| Nomes das tools | O LiteLLM **sempre** prefixa (`cdb_mcp-listar_posicoes_cdb`), fixo no código dele. O especialista remove o prefixo no cliente (`NomeTool` + `toolNameMapper`), então LLM, prompt e allowlist não mudam; a execução usa o nome com prefixo. A Ana chama `consultar_solicitacoes_credito` sem prefixo, que o gateway aceita |
+| Dependências | O especialista espera o LiteLLM healthy (conecta nos MCPs no startup); o LiteLLM espera os três MCPs. A Ana não depende (conexão preguiçosa) |
+| Fora do Docker | `make run-*` e os testes de integração continuam direto nos MCPs (`localhost`), sem header |
+| Versão | Imagem fixada em `v1.102.1`: o MCP gateway do LiteLLM está em `_experimental`. Ao atualizar a imagem, reconferir o formato do prefixo das tools e se `tools/call` com o nome sem prefixo continua aceito (a Ana depende disso) |
+
+**Evidências do spike (LiteLLM 1.102.1):** `initialize`, `tools/list` e `tools/call` funcionam pelo gateway nos três MCPs (Streamable HTTP, SDK Java 2.0.1). `tools/call` aceita nome com e sem prefixo, com o mesmo resultado da chamada direta.
+
+**Limites conhecidos:**
+- Os MCPs continuam alcançáveis diretamente pela rede do compose; o gateway não é imposto pela rede.
+- Os dois agentes usam a mesma chave, então qualquer um enxerga os três servidores.
+
+---
+
 ## 7. Próximos passos (depois do básico)
 
 Cada item mapeia um "porquê" da seção 2 para algo demonstrável na POC:
 
 | Porquê | Demonstração possível |
 |---|---|
-| Controle de acesso por aplicação | Uma virtual key do LiteLLM por agente (Ana e especialista), com os modelos permitidos em cada uma |
+| Controle de acesso por aplicação | Uma virtual key do LiteLLM por agente, limitando modelos e **servidores MCP** (Ana só em `cred_mcp`; especialista nos três) |
 | Limites de tokens e requisições | `rpm`/`tpm` e orçamento por chave no LiteLLM, e limite de crédito por chave no OpenRouter |
 | FinOps | Painel de gasto do LiteLLM (Postgres do compose) comparado com o dashboard do OpenRouter |
 | Auditoria e rastreabilidade | Metadata por chamada (agente, `contextId` e cliente) e um callback OpenTelemetry/Langfuse |
 | Flexibilidade | Modelo barato para a Ana rotear e modelo forte para o especialista, trocando só o apelido. Fallback de `sonnet-or` para `qwen-local` |
 | Guardrails | Guardrail de PII (CPF) e de prompt injection no LiteLLM antes de chegar ao modelo |
 | Credenciais | A chave do OpenRouter só no LiteLLM, com os agentes usando apenas a chave do gateway |
+| Impor o gateway | Rede Docker separada: MCPs só na rede do LiteLLM, agentes sem rota direta para eles |

@@ -21,7 +21,7 @@ import tools.jackson.databind.json.JsonMapper;
  * Adaptador MCP: a Ana chama a tool do cred-mcp pelo McpClient (sem McpToolProvider), montando os argumentos
  * em Java. Conexao preguicosa: DefaultMcpClient conecta no construtor, entao o client so e criado na primeira
  * consulta (a Ana sobe mesmo com o cred-mcp fora) e e descartado em qualquer falha (a proxima reconecta, o que
- * cobre o restart do cred-mcp, que invalida a sessao MCP).
+ * cobre o restart do cred-mcp ou do gateway, que invalida a sessao MCP).
  */
 public class CredMcpSolicitacoesCredito implements SolicitacoesCredito, AutoCloseable {
 
@@ -45,15 +45,25 @@ public class CredMcpSolicitacoesCredito implements SolicitacoesCredito, AutoClos
         this.fabrica = fabrica;
     }
 
-    public static CredMcpSolicitacoesCredito conectandoEm(String url, Duration timeout) {
+    /** No compose a URL e o LiteLLM (MCP gateway, /cred_mcp/mcp); a tool continua sendo chamada sem o prefixo. */
+    public static CredMcpSolicitacoesCredito conectandoEm(String url, Duration timeout, String gatewayKey) {
         return new CredMcpSolicitacoesCredito(() -> DefaultMcpClient.builder()
                 .key("cred-mcp")
                 .clientName("ana-agent")
-                .transport(StreamableHttpMcpTransport.builder().url(url).timeout(timeout).build())
+                .transport(StreamableHttpMcpTransport.builder()
+                        .url(url)
+                        .timeout(timeout)
+                        .customHeaders(cabecalhosGateway(gatewayKey))
+                        .build())
                 .initializationTimeout(timeout)
                 .toolExecutionTimeout(timeout)
                 .toolExecutionTimeoutErrorMessage(TIMEOUT_SENTINELA)
                 .build());
+    }
+
+    /** Autenticacao no LiteLLM (MCP gateway). Sem chave (acesso direto ao cred-mcp), nenhum header. */
+    static Map<String, String> cabecalhosGateway(String chave) {
+        return chave == null || chave.isBlank() ? Map.of() : Map.of("x-litellm-api-key", "Bearer " + chave);
     }
 
     @Override

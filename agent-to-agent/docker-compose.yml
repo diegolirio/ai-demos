@@ -22,10 +22,11 @@ services:
       <<: *healthcheck
       test: ["CMD-SHELL", "pg_isready -U agents -d agents"]
 
-  # AI Gateway self-hosted (docs/AI-GATEWAY.md). Os agentes nao dependem dele no startup: o cliente LLM e preguicoso,
-  # e com LLM_PROVIDER=openrouter ele nem e usado.
+  # AI Gateway self-hosted (docs/AI-GATEWAY.md): LLM (/v1) e MCP (/{servidor}/mcp). O especialista depende dele
+  # (conecta nos MCPs no startup); a Ana nao (conexoes preguicosas).
   litellm:
-    image: ghcr.io/berriai/litellm:main-stable
+    # Versao fixa: o MCP gateway do LiteLLM ainda e _experimental (validado no spike com 1.102.1)
+    image: ghcr.io/berriai/litellm:v1.102.1
     command: ["--config", "/app/config.yaml", "--port", "4000"]
     volumes:
       - ./docker/litellm/config.yaml:/app/config.yaml:ro
@@ -41,6 +42,13 @@ services:
       <<: *healthcheck
       # imagem sem curl garantido; python sempre existe
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\" || exit 1"]
+    depends_on:
+      cdb-mcp:
+        condition: service_healthy
+      tracking-money-mcp:
+        condition: service_healthy
+      cred-mcp:
+        condition: service_healthy
 
   cdb-mcp:
     build: ./cdb-mcp
@@ -76,18 +84,16 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-${LITELLM_MASTER_KEY:-sk-litellm-poc}}
       LLM_MODEL: ${LLM_MODEL:-${LITELLM_MODEL:-qwen-local}}
       A2A_PUBLIC_URL: http://investimentos-agent:8081
-      CDB_MCP_URL: http://cdb-mcp:8083/mcp
-      TRACKING_MONEY_MCP_URL: http://tracking-money-mcp:8082/mcp
-      CRED_MCP_URL: http://cred-mcp:8084/mcp
+      # MCP pelo LiteLLM (MCP gateway), endpoint por servidor
+      CDB_MCP_URL: http://litellm:4000/cdb_mcp/mcp
+      TRACKING_MONEY_MCP_URL: http://litellm:4000/tracking_money_mcp/mcp
+      CRED_MCP_URL: http://litellm:4000/cred_mcp/mcp
+      MCP_GATEWAY_KEY: ${LITELLM_MASTER_KEY:-sk-litellm-poc}
       DB_URL: jdbc:postgresql://postgres:5432/agents?currentSchema=investimentos
     depends_on:
       postgres:
         condition: service_healthy
-      cdb-mcp:
-        condition: service_healthy
-      tracking-money-mcp:
-        condition: service_healthy
-      cred-mcp:
+      litellm:
         condition: service_healthy
     healthcheck:
       <<: *healthcheck
@@ -103,8 +109,9 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-${LITELLM_MASTER_KEY:-sk-litellm-poc}}
       LLM_MODEL: ${LLM_MODEL:-${LITELLM_MODEL:-qwen-local}}
       INVESTIMENTOS_A2A_URL: http://investimentos-agent:8081
-      # MCP direto (solicitacoes de credito). Sem depends_on: a conexao e preguicosa e a Ana sobe sem o cred-mcp.
-      CRED_MCP_URL: http://cred-mcp:8084/mcp
+      # MCP pelo LiteLLM (solicitacoes de credito). Sem depends_on: a conexao e preguicosa e a Ana sobe sem o gateway.
+      CRED_MCP_URL: http://litellm:4000/cred_mcp/mcp
+      MCP_GATEWAY_KEY: ${LITELLM_MASTER_KEY:-sk-litellm-poc}
       DB_URL: jdbc:postgresql://postgres:5432/agents?currentSchema=ana
     depends_on:
       postgres:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Jornadas "meu dinheiro sumiu" (A2A) e "solicitacao de credito" (MCP direto) contra o compose. Asserções por palavra-chave (LLM não é determinístico).
+# Jornadas "meu dinheiro sumiu" (A2A) e "solicitacao de credito" (MCP, sem A2A) contra o compose. Asserções por palavra-chave (LLM não é determinístico).
 set -uo pipefail
 
 ANA_URL=${ANA_URL:-http://localhost:8080}
@@ -69,7 +69,7 @@ cenario_credito() { # cpf mensagem status-esperado [motivoCodigo que nao pode va
   reply=$(jq -r .reply <<<"$r")
   statuses=$(jq -r '[.credito[]?.status] | join(",")' <<<"$r")
   echo "  Ana: $reply"
-  echo "  credito (MCP direto): $(jq -c '[.credito[]? | {tipo, status, motivoCodigo}]' <<<"$r")"
+  echo "  credito (MCP, sem A2A): $(jq -c '[.credito[]? | {tipo, status, motivoCodigo}]' <<<"$r")"
   [[ "$(jq -r '.credito | type' <<<"$r")" == "array" ]]; verificar "Ana consultou o cred-mcp direto (credito presente)" $?
   grep -q "$statusEsperado" <<<"$statuses"; verificar "credito contem status $statusEsperado" $?
   if [[ -n "$codigo" ]]; then
