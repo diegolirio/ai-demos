@@ -31,6 +31,15 @@ make llm-use P=litellm && make llm-restart
 make llm-compare                             # smoke nos dois, lado a lado
 ```
 
+As tools MCP também passam pelo LiteLLM (`/{servidor}/mcp`). Para listar as do cred-mcp pelo gateway:
+
+```bash
+curl -s -X POST http://localhost:4000/cred_mcp/mcp -H 'x-litellm-api-key: Bearer sk-litellm-poc' \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | sed -n '/^data: /s/^data: //p' | jq -c '[.result.tools[].name]'
+# ["cred_mcp-consultar_conta_garantia","cred_mcp-consultar_solicitacoes_credito"]  (prefixo do gateway)
+```
+
 Sem `LLM_PROVIDER`, vale o modo antigo: `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` explícitos, conforme a tabela abaixo. Atalho para Ollama direto (sem gateway): `cp .env.llm-local.example .env`.
 
 Edite o `.env` **no seu editor**. Nunca cole a chave no chat nem faça commit dela; o `.env` está no `.gitignore`.

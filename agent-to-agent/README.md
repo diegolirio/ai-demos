@@ -5,13 +5,18 @@ Design: `docs/superpowers/specs/2026-09-22-a2a-poc-design.md`.
 LLM Gateway (AI Gateway): por que usar, LiteLLM x OpenRouter e plano da POC em [docs/AI-GATEWAY.md](docs/AI-GATEWAY.md).
 
 ```
-cliente ─POST /chat─▶ ana-agent:8080 ─A2A JSON-RPC─▶ investimentos-agent:8081 ─MCP─▶ cdb-mcp:8083
-                          │                                                    └─MCP─▶ tracking-money-mcp:8082
-                          │                                                    └─MCP─▶ cred-mcp:8084
-                          └─MCP (McpClient direto, solicitações de crédito)─────────────▶ cred-mcp:8084
-
-ana-agent + investimentos-agent ─LLM (API OpenAI)─▶ litellm:4000 ─┬─▶ Ollama (host, qwen-local)
-                                                                  └─▶ OpenRouter (sonnet-or, gpt-mini-or)
+cliente ─POST /chat─▶ ana-agent:8080 ─A2A JSON-RPC─▶ investimentos-agent:8081
+                          │                                   │
+                          │ MCP (solicitações de crédito)     │ MCP (cdb, tracking-money, cred)
+                          ▼                                   ▼
+                 ┌──────────────── litellm:4000 (AI Gateway) ────────────────┐
+                 │ MCP  /cdb_mcp/mcp ─────────────▶ cdb-mcp:8083              │
+                 │      /tracking_money_mcp/mcp ──▶ tracking-money-mcp:8082   │
+                 │      /cred_mcp/mcp ────────────▶ cred-mcp:8084             │
+                 │ LLM  /v1 ─┬─▶ Ollama (host, qwen-local)                    │
+                 │           └─▶ OpenRouter (sonnet-or, gpt-mini-or)          │
+                 └────────────────────────────────────────────────────────────┘
+ana-agent + investimentos-agent ─LLM─▶ litellm:4000/v1   (ou OpenRouter direto com LLM_PROVIDER=openrouter)
 ```
 
 ```mermaid
@@ -21,23 +26,26 @@ graph LR
       CDB[cdb-mcp :8083]
       TM[tracking-money-mcp :8082]
       CRED[cred-mcp :8084]
-
-      subgraph GW["AI Gateway (LLM_PROVIDER=litellm)"]
-            LiteLLM[litellm :4000]
-      end
       Ollama[(Ollama no host<br/>qwen-local)]
       OR[(OpenRouter<br/>sonnet-or / gpt-mini-or)]
 
-      Ana -->|A2A JSON-RPC| Invest
-      Ana -->|MCP direto: solicitações de crédito| CRED
-      Invest -->|MCP| CDB
-      Invest -->|MCP| TM
-      Invest -->|MCP| CRED
+      subgraph GW["AI Gateway: litellm :4000 (LLM + MCP)"]
+            LLMGW["/v1 (LLM)"]
+            MCPGW["/{servidor}/mcp (MCP)"]
+      end
 
-      Ana -->|LLM| LiteLLM
-      Invest -->|LLM| LiteLLM
-      LiteLLM --> Ollama
-      LiteLLM --> OR
+      Ana -->|A2A JSON-RPC| Invest
+
+      Ana -->|MCP: solicitações de crédito| MCPGW
+      Invest -->|MCP| MCPGW
+      MCPGW -->|/cdb_mcp/mcp| CDB
+      MCPGW -->|/tracking_money_mcp/mcp| TM
+      MCPGW -->|/cred_mcp/mcp| CRED
+
+      Ana -->|LLM| LLMGW
+      Invest -->|LLM| LLMGW
+      LLMGW --> Ollama
+      LLMGW --> OR
       Ana -.->|LLM_PROVIDER=openrouter| OR
       Invest -.->|LLM_PROVIDER=openrouter| OR
 ```
