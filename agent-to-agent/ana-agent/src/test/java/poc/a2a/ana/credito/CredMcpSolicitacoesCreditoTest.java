@@ -152,4 +152,12 @@ class CredMcpSolicitacoesCreditoTest {
 
         verify(mcp).close();
     }
+
+    @Test
+    void cabecalhoDoGatewaySoComChave() {
+        assertThat(CredMcpSolicitacoesCredito.cabecalhosGateway("sk-x")).containsExactly(
+                java.util.Map.entry("x-litellm-api-key", "Bearer sk-x"));
+        assertThat(CredMcpSolicitacoesCredito.cabecalhosGateway("")).isEmpty();
+        assertThat(CredMcpSolicitacoesCredito.cabecalhosGateway(null)).isEmpty();
+    }
 }
