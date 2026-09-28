@@ -21,7 +21,7 @@ import tools.jackson.databind.json.JsonMapper;
  * Adaptador MCP: a Ana chama a tool do cred-mcp pelo McpClient (sem McpToolProvider), montando os argumentos
  * em Java. Conexao preguicosa: DefaultMcpClient conecta no construtor, entao o client so e criado na primeira
  * consulta (a Ana sobe mesmo com o cred-mcp fora) e e descartado em qualquer falha (a proxima reconecta, o que
- * cobre o restart do cred-mcp, que invalida a sessao MCP).
+ * cobre o restart do cred-mcp ou do gateway, que invalida a sessao MCP).
  */
 public class CredMcpSolicitacoesCredito implements SolicitacoesCredito, AutoCloseable {
 
