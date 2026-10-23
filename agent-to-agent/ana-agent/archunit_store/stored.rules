@@ -1,0 +1,3 @@
+#
+#Thu Sep 24 06:59:43 GMT-03:00 2026
+classes\ that\ are\ entrypoints\ (@RestController\ or\ @Scheduled)\ and\ are\ not\ annotated\ with\ @RestControllerAdvice\ should\ have\ a\ corresponding\ integration\ test\ (<Name>IT\ extending\ BaseIntegrationTest),\ because\ entrypoints\ exigem\ IT\ (BaseIntegrationTest)=876fdde7-092e-4496-8f5a-c36be3775cd6
