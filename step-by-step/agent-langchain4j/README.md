@@ -2,7 +2,8 @@
 
 ## Creating my agent application
 
-<img width="1693" height="899" alt="image" src="https://gist.github.com/user-attachments/assets/e1e7f6ec-9e99-4ec9-975b-b549890a21a0" />
+<img width="1710" height="904" alt="image" src="https://github.com/user-attachments/assets/eb0b40c6-5c72-4a2b-b0dd-7cddbd36471e" />
+
 
 And... add the both deps:
 
