@@ -1,6 +1,7 @@
-## Spring AI LLM 
+# Spring AI LLM 
 
-<img width="1748" height="896" alt="image" src="https://gist.github.com/user-attachments/assets/f49663d3-2914-4181-b423-c8edb20219b3" />
+<img width="891" height="454" alt="image" src="https://github.com/user-attachments/assets/29b35d0a-645a-4e18-9a4c-d4771f52e188" />
+
 
 Props.  
 
